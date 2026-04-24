@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "avrs"
+version = "0.1.0"
+description = "Adaptive Voice Rendering System — hybrid TTS routing for cost-sensitive deployments"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "librosa",
+    "soundfile",
+    "numpy",
+    "scipy",
+    "spacy",
+    "resemblyzer",
+    "fastapi",
+    "uvicorn[standard]",
+    "click",
+    "rich",
+    "redis",
+    "python-dotenv",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+chatterbox = ["chatterbox-tts"]
+kokoro = ["kokoro-onnx"]
+dev = ["pytest", "pytest-asyncio", "httpx"]
+
+[project.scripts]
+avrs = "avrs.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["avrs*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
