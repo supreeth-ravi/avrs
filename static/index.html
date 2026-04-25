@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AVRS — Voice Call</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --indigo: #6366f1;
+  --purple: #8b5cf6;
+  --green:  #22c55e;
+  --red:    #ef4444;
+  --bg:       #0d0f1a;
+  --bg-left:  #0f1220;
+  --bg-right: #0b0d17;
+  --card:   rgba(255,255,255,0.04);
+  --border: rgba(255,255,255,0.08);
+  --text:   #e2e8f0;
+  --muted:  #64748b;
+  --dim:    #334155;
+  --col-pre:   #86efac;
+  --col-cache: #93c5fd;
+  --col-tts:   #e2e8f0;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Desktop ambient background */
+@media (min-width: 700px) {
+  body {
+    padding: 20px;
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 0%, rgba(99,102,241,0.07) 0%, transparent 60%),
+      var(--bg);
+  }
+}
+
+/* ── CALL WINDOW ──────────────────────────────────────────────────────── */
+#screen {
+  width: 100%;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+  position: relative;
+}
+
+@media (min-width: 700px) {
+  #screen {
+    width: min(900px, 100%);
+    height: min(680px, calc(100dvh - 40px));
+    flex-direction: row;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.04) inset,
+      0 40px 100px rgba(0,0,0,0.65);
+    overflow: hidden;
+  }
+}
+
+/* ── LEFT PANEL ───────────────────────────────────────────────────────── */
+.panel-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 20px 16px;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+  background: var(--bg);
+}
+
+/* Glow */
+.panel-left::before {
+  content: "";
+  position: absolute;
+  top: -50px; left: 50%;
+  transform: translateX(-50%);
+  width: 260px; height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99,102,241,0.1) 0%, transparent 70%);
+  pointer-events: none;
+  transition: background 0.6s;
+}
+#screen.active .panel-left::before {
+  background: radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%);
+}
+.panel-left > * { position: relative; z-index: 1; }
+
+/* Mobile active: compact panel-left so history has room */
+@media (max-width: 699px) {
+  #screen.active .panel-left { flex: 0 0 auto; }
+  #screen.active .panel-right { flex: 1; min-height: 180px; }
+}
+
+@media (min-width: 700px) {
+  .panel-left {
+    flex: 0 0 310px;
+    width: 310px;
+    justify-content: center;
+    padding: 28px 24px 24px;
+    background: var(--bg-left);
+    border-right: 1px solid var(--border);
+  }
+}
+
+/* ── RIGHT PANEL ──────────────────────────────────────────────────────── */
+.panel-right {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  padding: 14px 16px 16px;
+  background: rgba(255,255,255,0.015);
+  border-top: 1px solid var(--border);
+  /* pre-call: just enough for agent cards */
+  min-height: 148px;
+}
+
+@media (min-width: 700px) {
+  .panel-right {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    padding: 22px 22px 18px;
+    background: var(--bg-right);
+    border-top: none;
+  }
+}
+
+/* ── TOP BAR ──────────────────────────────────────────────────────────── */
+.top-bar {
+  width: 100%; display: flex; align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px; flex-shrink: 0;
+}
+.conn-pill {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; padding: 4px 10px; border-radius: 999px;
+  background: var(--card); border: 1px solid var(--border);
+  color: var(--muted); transition: all 0.3s; letter-spacing: 0.02em;
+}
+.conn-pill.live { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.3); color: #86efac; }
+.conn-pill .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
+.conn-pill.live .dot { background: var(--green); animation: blink 2s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.call-timer { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: 0.05em; }
+
+/* ── AVATAR ───────────────────────────────────────────────────────────── */
+.avatar-section {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  width: 200px; height: 200px; flex-shrink: 0;
+}
+.ring {
+  position: absolute; border-radius: 50%;
+  border: 1.5px solid rgba(99,102,241,0.25);
+  opacity: 0; pointer-events: none;
+}
+.r1 { width: 122px; height: 122px; }
+.r2 { width: 156px; height: 156px; }
+.r3 { width: 192px; height: 192px; }
+.avatar-section.agent-speaking .r1 { animation: pulse 2.4s ease-out infinite 0s;   border-color: rgba(99,102,241,0.5); }
+.avatar-section.agent-speaking .r2 { animation: pulse 2.4s ease-out infinite 0.5s; border-color: rgba(99,102,241,0.35); }
+.avatar-section.agent-speaking .r3 { animation: pulse 2.4s ease-out infinite 1s;   border-color: rgba(99,102,241,0.2); }
+.avatar-section.user-speaking  .r1 { animation: pulse 1.6s ease-out infinite 0s;   border-color: rgba(34,197,94,0.5); }
+.avatar-section.user-speaking  .r2 { animation: pulse 1.6s ease-out infinite 0.3s; border-color: rgba(34,197,94,0.35); }
+.avatar-section.user-speaking  .r3 { animation: pulse 1.6s ease-out infinite 0.6s; border-color: rgba(34,197,94,0.2); }
+@keyframes pulse {
+  0%   { transform: scale(0.92); opacity: 0.9; }
+  60%  { opacity: 0.2; }
+  100% { transform: scale(1.08); opacity: 0; }
+}
+.avatar-circle {
+  width: 92px; height: 92px; border-radius: 50%;
+  background: linear-gradient(145deg, #6366f1, #8b5cf6);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 36px; font-weight: 700; color: #fff;
+  position: relative; z-index: 2;
+  box-shadow: 0 8px 28px rgba(99,102,241,0.3), 0 2px 8px rgba(0,0,0,0.4);
+  transition: box-shadow 0.3s;
+}
+.avatar-section.agent-speaking .avatar-circle { box-shadow: 0 8px 36px rgba(99,102,241,0.5), 0 0 0 4px rgba(99,102,241,0.2); }
+.avatar-section.user-speaking  .avatar-circle { box-shadow: 0 8px 28px rgba(99,102,241,0.3), 0 0 0 4px rgba(34,197,94,0.3); }
+
+.agent-name    { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 2px; text-align: center; flex-shrink: 0; }
+.agent-company { font-size: 11px; color: var(--muted); text-align: center; flex-shrink: 0; margin-bottom: 6px; }
+.call-state    {
+  font-size: 11px; color: var(--dim); text-align: center; letter-spacing: 0.03em;
+  flex-shrink: 0; min-height: 14px; margin-bottom: 8px; transition: color 0.3s;
+}
+.call-state.active { color: #86efac; }
+
+/* ── WAVEFORM ─────────────────────────────────────────────────────────── */
+.waveform {
+  display: flex; align-items: center; justify-content: center;
+  gap: 2.5px; height: 34px; width: 100%; max-width: 210px;
+  flex-shrink: 0; margin-bottom: 8px;
+}
+.wbar { width: 3px; border-radius: 3px; background: var(--dim); min-height: 3px; transition: height 0.06s, background 0.12s; }
+
+/* ── SUBTITLES ────────────────────────────────────────────────────────── */
+.subtitle-area {
+  width: 100%; display: flex; flex-direction: column; gap: 4px;
+  align-items: stretch; flex-shrink: 0; margin-bottom: 6px;
+}
+.typing-dots {
+  display: flex; gap: 4px; align-items: center; justify-content: center;
+  padding: 5px 12px; border-radius: 10px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+  opacity: 0; transition: opacity 0.2s; align-self: center;
+}
+.typing-dots.show { opacity: 1; }
+.typing-dots span {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--indigo); display: block; animation: tdot 1.2s infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes tdot { 0%,60%,100%{transform:translateY(0);opacity:.6} 30%{transform:translateY(-5px);opacity:1} }
+.subtitle-line {
+  font-size: 12px; line-height: 1.5; text-align: center;
+  padding: 5px 12px; border-radius: 10px;
+  width: 100%; min-width: 0;
+  opacity: 0; transform: translateY(4px); transition: opacity 0.3s, transform 0.3s;
+  word-break: break-word; overflow-wrap: anywhere; white-space: normal;
+}
+.subtitle-line.show { opacity: 1; transform: translateY(0); }
+.user-sub  { background: rgba(79,70,229,0.15); border: 1px solid rgba(79,70,229,0.2); color: #a5b4fc; }
+.agent-sub { background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text); }
+
+/* ── AVRS METRICS ─────────────────────────────────────────────────────── */
+.avrs-metrics {
+  display: flex; gap: 4px; flex-wrap: wrap; justify-content: center;
+  min-height: 18px; margin-bottom: 8px; flex-shrink: 0;
+}
+.chip {
+  font-size: 10px; padding: 2px 8px; border-radius: 999px;
+  font-weight: 500; letter-spacing: 0.02em; border: 1px solid transparent;
+}
+.chip-pre   { background: rgba(20,83,45,0.5);  color: #86efac; border-color: rgba(34,197,94,0.2); }
+.chip-cache { background: rgba(30,58,95,0.5);  color: #93c5fd; border-color: rgba(59,130,246,0.2); }
+.chip-tts   { background: rgba(59,31,94,0.5);  color: #d8b4fe; border-color: rgba(168,85,247,0.2); }
+.chip-meta  { background: rgba(30,41,59,0.5);  color: #94a3b8; border-color: rgba(100,116,139,0.2); }
+.seg-pre   { color: var(--col-pre); }
+.seg-cache { color: var(--col-cache); }
+.seg-tts   { color: var(--col-tts); }
+
+/* ── CONTROLS ─────────────────────────────────────────────────────────── */
+.controls {
+  flex-shrink: 0; width: 100%; display: flex; justify-content: center;
+  margin-top: auto; padding-top: 10px;
+}
+#pre-controls { width: 100%; display: flex; justify-content: center; align-items: center; }
+.dial-btn {
+  width: 64px; height: 64px; border-radius: 50%; border: none; cursor: pointer;
+  background: linear-gradient(145deg, #22c55e, #16a34a);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto;
+  box-shadow: 0 4px 20px rgba(34,197,94,0.4); color: white;
+  transition: transform 0.15s, box-shadow 0.15s;
+  animation: dialPulse 2.5s ease-in-out infinite;
+}
+.dial-btn:hover { transform: scale(1.07); box-shadow: 0 4px 32px rgba(34,197,94,0.6); animation: none; }
+.dial-btn svg { width: 27px; height: 27px; }
+@keyframes dialPulse {
+  0%,100% { box-shadow: 0 4px 20px rgba(34,197,94,0.4); }
+  50%      { box-shadow: 0 4px 32px rgba(34,197,94,0.65), 0 0 0 8px rgba(34,197,94,0.1); }
+}
+.call-controls-row { display: flex; align-items: center; justify-content: center; gap: 20px; }
+.ctrl-btn {
+  width: 50px; height: 50px; border-radius: 50%; border: none; cursor: pointer;
+  background: rgba(255,255,255,0.08);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s, transform 0.15s; color: var(--text);
+}
+.ctrl-btn:hover { background: rgba(255,255,255,0.14); transform: scale(1.05); }
+.ctrl-btn.muted { background: rgba(239,68,68,0.15); color: var(--red); }
+.ctrl-btn svg { width: 20px; height: 20px; }
+.hangup-btn {
+  width: 62px; height: 62px; border-radius: 50%; border: none; cursor: pointer;
+  background: linear-gradient(145deg, #ef4444, #dc2626);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 16px rgba(239,68,68,0.4); color: white;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.hangup-btn:hover { transform: scale(1.06); box-shadow: 0 4px 24px rgba(239,68,68,0.6); }
+.hangup-btn svg { width: 26px; height: 26px; }
+
+/* ── AGENT PICKER ─────────────────────────────────────────────────────── */
+.agent-picker {
+  flex: 1; display: flex; flex-direction: column; justify-content: center;
+  transition: opacity 0.3s, transform 0.3s;
+  min-height: 0;
+}
+.agent-picker.hidden { display: none; }
+.picker-label {
+  font-size: 10px; color: var(--muted); text-align: center;
+  margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+}
+.agent-cards { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.agent-card {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  border-radius: 14px; border: 1.5px solid var(--border); background: var(--card);
+  cursor: pointer; transition: border-color 0.2s, background 0.2s; user-select: none;
+}
+.agent-card:hover    { border-color: rgba(99,102,241,0.4); background: rgba(99,102,241,0.06); }
+.agent-card.selected { border-color: rgba(99,102,241,0.5); background: rgba(99,102,241,0.1); }
+.card-init {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(135deg,#6366f1,#8b5cf6);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 14px; color: #fff; flex-shrink: 0;
+}
+.card-info { display: flex; flex-direction: column; }
+.card-info b    { font-size: 13px; font-weight: 600; }
+.card-info span { font-size: 10px; color: var(--muted); }
+
+/* ── COLOUR KEY + HISTORY ─────────────────────────────────────────────── */
+.colour-key {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  font-size: 10px; color: var(--muted);
+  padding-bottom: 10px; flex-shrink: 0;
+}
+.colour-key span { display: flex; align-items: center; gap: 4px; }
+.colour-key .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+#history {
+  flex: 1; width: 100%;
+  overflow-y: auto; overflow-x: hidden;
+  display: none; flex-direction: column; gap: 8px;
+  min-height: 0; padding-bottom: 4px;
+}
+#history.show { display: flex; }
+#history::-webkit-scrollbar { width: 3px; }
+#history::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px; }
+
+.hist-row { width: 100%; min-width: 0; }
+.hist-label { font-size: 10px; color: var(--muted); margin-bottom: 3px; padding: 0 2px; }
+.hist-bubble {
+  display: block; font-size: 13px; padding: 8px 12px; border-radius: 14px; line-height: 1.6;
+  width: fit-content; max-width: 88%; min-width: 0;
+  word-break: break-word; overflow-wrap: anywhere; white-space: normal;
+}
+.hist-row.user .hist-label  { text-align: right; }
+.hist-row.user .hist-bubble {
+  margin-left: auto;
+  background: rgba(79,70,229,0.22); border: 1px solid rgba(79,70,229,0.28);
+  color: #c7d2fe; border-bottom-right-radius: 3px;
+}
+.hist-row.agent .hist-label { text-align: left; }
+.hist-row.agent .hist-bubble {
+  margin-right: auto;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+  color: var(--text); border-bottom-left-radius: 3px;
+}
+
+/* ── SUMMARY OVERLAY ──────────────────────────────────────────────────── */
+.summary-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: var(--bg); overflow-y: auto;
+  display: none; flex-direction: column; align-items: center;
+  padding: 28px 20px 40px;
+}
+.summary-overlay.show { display: flex; }
+.sum-header { width: 100%; max-width: 480px; text-align: center; margin-bottom: 24px; flex-shrink: 0; }
+.sum-header h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 6px; }
+.sum-meta { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.sum-badge {
+  font-size: 11px; padding: 3px 10px; border-radius: 999px;
+  background: var(--card); border: 1px solid var(--border); color: var(--muted);
+}
+.sum-section {
+  width: 100%; max-width: 480px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  border-radius: 16px; padding: 18px 20px; margin-bottom: 14px; flex-shrink: 0;
+}
+.sum-section-title {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px;
+}
+.routing-bar-big { height: 8px; border-radius: 4px; overflow: hidden; display: flex; margin-bottom: 12px; background: var(--dim); }
+.routing-bar-big .rb-pre   { background: var(--col-pre); }
+.routing-bar-big .rb-cache { background: var(--col-cache); }
+.routing-bar-big .rb-tts   { background: #8b5cf6; }
+.routing-legend { display: flex; gap: 14px; flex-wrap: wrap; }
+.rleg { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.rleg .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.rleg .val { font-weight: 600; }
+.rleg .lbl { color: var(--muted); }
+.latency-pipeline {
+  display: flex; align-items: stretch; gap: 0; border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--border); margin-bottom: 14px;
+}
+.lat-phase {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  padding: 10px 6px; position: relative;
+}
+.lat-phase + .lat-phase::before {
+  content: ""; position: absolute; left: 0; top: 20%; bottom: 20%;
+  width: 1px; background: var(--border);
+}
+.lat-phase-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.lat-phase-val   { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+.lat-phase-sub   { font-size: 9px; color: var(--dim); margin-top: 2px; }
+.lat-stt   { color: #60a5fa; }
+.lat-llm   { color: #c084fc; }
+.lat-tts   { color: #34d399; }
+.lat-ttfb  { color: #fbbf24; }
+.lat-bar-row { margin-bottom: 10px; }
+.lat-bar { height: 6px; border-radius: 3px; overflow: hidden; display: flex; background: var(--dim); }
+.lat-bar .lb-stt  { background: #60a5fa; }
+.lat-bar .lb-llm  { background: #c084fc; }
+.lat-bar .lb-tts  { background: #34d399; }
+.cost-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; text-align: center; }
+.cost-col-head { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.cost-value { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+.cost-sub   { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.cost-el    { color: #fca5a5; }
+.cost-avrs  { color: #86efac; }
+.cost-save  { color: #fbbf24; }
+.calc-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.calc-row label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.calc-input {
+  flex: 1; min-width: 80px;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-size: 14px;
+  padding: 7px 12px; outline: none; transition: border-color 0.2s;
+}
+.calc-input:focus { border-color: rgba(99,102,241,0.5); }
+.calc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.calc-table th {
+  padding: 6px 8px; text-align: left; color: var(--muted);
+  font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--border);
+}
+.calc-table th:not(:first-child) { text-align: right; }
+.calc-table td { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.calc-table td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.calc-table tr:last-child td { border-bottom: none; }
+.calc-table .row-label { color: var(--muted); }
+.calc-table .val-el    { color: #fca5a5; font-weight: 500; }
+.calc-table .val-avrs  { color: #86efac; font-weight: 500; }
+.calc-table .val-save  { color: #fbbf24; font-weight: 600; }
+.note-text { font-size: 10px; color: var(--dim); margin-top: 10px; line-height: 1.6; }
+.new-call-btn {
+  width: 100%; max-width: 480px;
+  padding: 14px; border-radius: 14px; border: none; cursor: pointer;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff; font-size: 15px; font-weight: 600;
+  box-shadow: 0 4px 20px rgba(99,102,241,0.3);
+  transition: transform 0.15s, box-shadow 0.15s;
+  flex-shrink: 0; margin-top: 4px;
+}
+.new-call-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(99,102,241,0.45); }
+
+/* ── CORPUS OPPORTUNITIES ─────────────────────────────────────────────── */
+.corpus-status {
+  font-size: 12px; color: var(--muted); text-align: center; padding: 12px 0;
+}
+.corpus-item {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.corpus-item:last-of-type { border-bottom: none; }
+.corpus-item-top { display: flex; align-items: flex-start; gap: 10px; }
+.corpus-phrase { flex: 1; font-size: 13px; color: var(--text); line-height: 1.5; }
+.corpus-add-btn {
+  flex-shrink: 0; padding: 4px 12px; border-radius: 8px; cursor: pointer;
+  background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3);
+  color: #a5b4fc; font-size: 11px; font-weight: 500; transition: background 0.2s;
+  white-space: nowrap;
+}
+.corpus-add-btn:hover:not(:disabled) { background: rgba(99,102,241,0.28); }
+.corpus-add-btn:disabled { opacity: 0.45; cursor: default; }
+.corpus-add-btn.added { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.3); color: #86efac; }
+.corpus-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.corpus-freq-badge {
+  font-size: 10px; padding: 2px 7px; border-radius: 999px;
+  background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.25); color: #fbbf24;
+}
+.corpus-impact-badge {
+  font-size: 10px; padding: 2px 7px; border-radius: 999px;
+  background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.15); color: #a5b4fc;
+}
+.corpus-match-text { font-size: 10px; color: var(--dim); font-style: italic; margin-top: 2px; }
+.corpus-add-all-btn {
+  width: 100%; padding: 10px; border-radius: 10px; border: none; cursor: pointer;
+  background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.25);
+  color: #a5b4fc; font-size: 13px; font-weight: 500; margin-top: 14px;
+  transition: background 0.2s, border-color 0.2s;
+}
+.corpus-add-all-btn:hover:not(:disabled) { background: rgba(99,102,241,0.22); border-color: rgba(99,102,241,0.4); }
+.corpus-add-all-btn:disabled { opacity: 0.4; cursor: default; }
+.corpus-success {
+  font-size: 12px; color: #86efac; text-align: center;
+  padding: 8px 0 0; display: none;
+}
+.corpus-success.show { display: block; }
+
+/* ── SHORT MOBILE ─────────────────────────────────────────────────────── */
+@media (max-height: 640px) and (max-width: 699px) {
+  .avatar-section { width: 160px; height: 160px; }
+  .avatar-circle  { width: 76px; height: 76px; font-size: 28px; }
+  .r1 { width: 96px;  height: 96px;  }
+  .r2 { width: 124px; height: 124px; }
+  .r3 { width: 154px; height: 154px; }
+  .agent-name    { font-size: 17px; }
+  .waveform      { height: 26px; margin-bottom: 5px; }
+  .subtitle-area { margin-bottom: 4px; }
+  .avrs-metrics  { margin-bottom: 4px; }
+  .panel-right   { min-height: 120px; }
+}
+
+/* ── LANDSCAPE MOBILE ─────────────────────────────────────────────────── */
+@media (orientation: landscape) and (max-height: 520px) {
+  #screen {
+    flex-direction: row !important;
+    height: 100dvh !important;
+    border-radius: 0 !important;
+    border: none !important;
+    max-width: 100% !important;
+  }
+  .panel-left {
+    flex: 0 0 260px !important;
+    width: 260px !important;
+    justify-content: center;
+    border-right: 1px solid var(--border);
+    border-top: none;
+    padding: 12px 16px !important;
+  }
+  .panel-right {
+    flex: 1 !important;
+    min-height: 0 !important;
+    border-top: none !important;
+    padding: 14px !important;
+  }
+  .avatar-section { width: 130px; height: 130px; }
+  .avatar-circle  { width: 66px; height: 66px; font-size: 24px; }
+  .r1 { width: 82px; height: 82px; }
+  .r2 { width: 106px; height: 106px; }
+  .r3 { width: 128px; height: 128px; }
+  .agent-name { font-size: 15px; }
+  .waveform   { height: 22px; margin-bottom: 5px; }
+  .dial-btn   { width: 54px; height: 54px; }
+  .dial-btn svg { width: 22px; height: 22px; }
+  .hangup-btn { width: 54px; height: 54px; }
+  .ctrl-btn   { width: 44px; height: 44px; }
+  .subtitle-area { margin-bottom: 4px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── call window ──────────────────────────────────────────────────────── -->
+<div id="screen">
+
+  <!-- LEFT: avatar, waveform, controls -->
+  <div class="panel-left">
+
+    <div class="top-bar">
+      <div class="conn-pill" id="conn-pill">
+        <div class="dot"></div>
+        <span id="conn-text">Disconnected</span>
+      </div>
+      <div class="call-timer" id="call-timer" style="display:none">00:00</div>
+    </div>
+
+    <div class="avatar-section" id="avatar-section">
+      <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
+      <div class="avatar-circle" id="avatar-circle">P</div>
+    </div>
+
+    <div class="agent-name"    id="agent-name">Priya</div>
+    <div class="agent-company" id="agent-company">HealthFirst Insurance</div>
+    <div class="call-state"    id="call-state">AI Voice Agent · AVRS</div>
+
+    <div class="waveform" id="waveform"></div>
+
+    <div class="subtitle-area">
+      <div class="typing-dots" id="typing-dots"><span></span><span></span><span></span></div>
+      <div class="subtitle-line user-sub"  id="sub-user"></div>
+      <div class="subtitle-line agent-sub" id="sub-agent"></div>
+    </div>
+
+    <div class="avrs-metrics" id="avrs-metrics"></div>
+
+    <div class="controls">
+      <div id="pre-controls">
+        <button class="dial-btn" onclick="startCall()" title="Start call">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+        </button>
+      </div>
+      <div class="call-controls-row" id="active-controls" style="display:none">
+        <button class="ctrl-btn" id="mute-btn" onclick="toggleMute()" title="Mute">
+          <svg id="mute-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+        </button>
+        <button class="hangup-btn" onclick="endCall()" title="End call">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56-.35-.12-.74-.03-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.12-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 4 3 4.24 3 4.99 3 13.28 10.73 21 19.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
+        </button>
+        <button class="ctrl-btn" title="Speaker">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /panel-left -->
+
+  <!-- RIGHT: agent picker + conversation history -->
+  <div class="panel-right">
+
+    <div class="agent-picker" id="agent-picker">
+      <div class="picker-label">Choose your agent</div>
+      <div class="agent-cards">
+        <div class="agent-card selected" data-agent="insurance" onclick="selectAgent(this)">
+          <div class="card-init">P</div>
+          <div class="card-info"><b>Priya</b><span>Insurance</span></div>
+        </div>
+        <div class="agent-card" data-agent="banking" onclick="selectAgent(this)">
+          <div class="card-init" style="background:linear-gradient(135deg,#0ea5e9,#0284c7)">A</div>
+          <div class="card-info"><b>Arjun</b><span>Banking</span></div>
+        </div>
+        <div class="agent-card" data-agent="payments" onclick="selectAgent(this)">
+          <div class="card-init" style="background:linear-gradient(135deg,#f59e0b,#d97706)">M</div>
+          <div class="card-info"><b>Maya</b><span>Payments</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="colour-key" id="colour-key" style="display:none">
+      <span><i class="dot" style="background:var(--col-pre)"></i> Prerecorded</span>
+      <span><i class="dot" style="background:var(--col-cache)"></i> Cached</span>
+      <span><i class="dot" style="background:#8b5cf6"></i> Live TTS</span>
+    </div>
+
+    <div id="history"></div>
+
+  </div><!-- /panel-right -->
+
+</div><!-- /#screen -->
+
+<!-- ── summary overlay ──────────────────────────────────────────────────── -->
+<div class="summary-overlay" id="summary">
+
+  <div class="sum-header">
+    <h2>Call Summary</h2>
+    <div class="sum-meta">
+      <span class="sum-badge" id="sum-agent-badge">Priya · Insurance</span>
+      <span class="sum-badge" id="sum-dur-badge">0:00</span>
+      <span class="sum-badge" id="sum-turns-badge">0 turns</span>
+    </div>
+  </div>
+
+  <div class="sum-section">
+    <div class="sum-section-title">Audio Routing This Call</div>
+    <div class="routing-bar-big" id="sum-routing-bar">
+      <div class="rb-pre"   id="rb-pre"   style="width:0%"></div>
+      <div class="rb-cache" id="rb-cache" style="width:0%"></div>
+      <div class="rb-tts"   id="rb-tts"   style="width:100%"></div>
+    </div>
+    <div class="routing-legend">
+      <div class="rleg"><span class="dot" style="background:var(--col-pre)"></span>   <span class="val" id="rl-pre">0%</span>   <span class="lbl">Prerecorded (corpus)</span></div>
+      <div class="rleg"><span class="dot" style="background:var(--col-cache)"></span> <span class="val" id="rl-cache">0%</span> <span class="lbl">Cached</span></div>
+      <div class="rleg"><span class="dot" style="background:#8b5cf6"></span>           <span class="val" id="rl-tts">100%</span> <span class="lbl">Live TTS</span></div>
+    </div>
+  </div>
+
+  <div class="sum-section" id="sum-latency-section" style="display:none">
+    <div class="sum-section-title">Avg Pipeline Latency (per turn)</div>
+    <div class="lat-bar-row">
+      <div class="lat-bar" id="lat-bar">
+        <div class="lb-stt"  id="lb-stt"  style="width:0%"></div>
+        <div class="lb-llm"  id="lb-llm"  style="width:0%"></div>
+        <div class="lb-tts"  id="lb-tts"  style="width:0%"></div>
+      </div>
+    </div>
+    <div class="latency-pipeline">
+      <div class="lat-phase">
+        <div class="lat-phase-label">STT</div>
+        <div class="lat-phase-val lat-stt" id="sum-stt-ms">—</div>
+        <div class="lat-phase-sub">Deepgram</div>
+      </div>
+      <div class="lat-phase">
+        <div class="lat-phase-label">LLM</div>
+        <div class="lat-phase-val lat-llm" id="sum-llm-ms">—</div>
+        <div class="lat-phase-sub">Claude</div>
+      </div>
+      <div class="lat-phase">
+        <div class="lat-phase-label">TTS</div>
+        <div class="lat-phase-val lat-tts" id="sum-tts-ms">—</div>
+        <div class="lat-phase-sub">AVRS render</div>
+      </div>
+      <div class="lat-phase">
+        <div class="lat-phase-label">TTFB</div>
+        <div class="lat-phase-val lat-ttfb" id="sum-ttfb-ms">—</div>
+        <div class="lat-phase-sub">first audio</div>
+      </div>
+    </div>
+    <div class="note-text">TTFB = time from end of speech to first audio byte. Target: &lt;800ms for natural conversation.</div>
+  </div>
+
+  <div class="sum-section">
+    <div class="sum-section-title">Cost Per Call — AVRS vs ElevenLabs</div>
+    <div class="cost-grid">
+      <div>
+        <div class="cost-col-head">ElevenLabs</div>
+        <div class="cost-value cost-el" id="sum-el-cost">$0.000</div>
+        <div class="cost-sub">All chars synthesised</div>
+      </div>
+      <div>
+        <div class="cost-col-head">AVRS</div>
+        <div class="cost-value cost-avrs" id="sum-avrs-cost">$0.000</div>
+        <div class="cost-sub">TTS chars only</div>
+      </div>
+      <div>
+        <div class="cost-col-head">Saved</div>
+        <div class="cost-value cost-save" id="sum-saved">$0.000</div>
+        <div class="cost-sub" id="sum-saved-pct">0% reduction</div>
+      </div>
+    </div>
+    <div class="note-text" style="margin-top:12px">
+      ElevenLabs rate: $0.30 / 1k chars &nbsp;·&nbsp; AVRS: corpus + cache served free; only <span id="sum-tts-chars">0</span> chars hit live TTS out of <span id="sum-total-chars">0</span> total.
+    </div>
+  </div>
+
+  <div class="sum-section">
+    <div class="sum-section-title">ROI Calculator</div>
+    <div class="calc-row">
+      <label for="calc-daily">Daily call volume</label>
+      <input class="calc-input" id="calc-daily" type="number" min="1" max="10000000" value="1000" oninput="updateCalc()">
+      <label for="calc-months">Months</label>
+      <input class="calc-input" id="calc-months" type="number" min="1" max="24" value="1" style="max-width:64px" oninput="updateCalc()">
+    </div>
+    <table class="calc-table" id="calc-table">
+      <thead>
+        <tr><th>Metric</th><th>ElevenLabs</th><th>AVRS</th><th>Savings</th></tr>
+      </thead>
+      <tbody id="calc-body"></tbody>
+    </table>
+    <div class="note-text">
+      AVRS infra estimate: $50/mo (≤2k calls/day), $200/mo (≤20k), $800/mo (≤100k), $3k/mo (≤500k), $10k/mo (500k+).
+    </div>
+  </div>
+
+  <div class="sum-section" id="corpus-opps-section" style="display:none">
+    <div class="sum-section-title">Corpus Opportunities</div>
+    <div id="corpus-opps-body">
+      <div class="corpus-status" id="corpus-loading">Loading recommendations…</div>
+    </div>
+    <div class="corpus-success" id="corpus-success"></div>
+  </div>
+
+  <button class="new-call-btn" onclick="resetToIdle()">Start New Call</button>
+</div>
+
+<script>
+const WS_BASE     = `ws://${location.hostname}:${location.port || 8001}`;
+const MIC_SR      = 16000;
+const WBARS       = 32;
+const VAD_THRESH  = 0.016;
+const SPEECH_ON   = 5;
+const SILENCE_END = 20;
+const EL_RATE     = 0.0003;
+
+let ws = null, callActive = false, muted = false;
+let timerHandle = null, timerSecs = 0;
+let captureCtx = null, playCtx = null, micStream = null, processor = null, analyser = null, rafHandle = null;
+let speechChunks = 0, silenceChunks = 0, userSpeaking = false, audioBuffer = [];
+let playQueue = [], playNode = null, agentSpeaking = false, nextPlayTime = 0;
+let pendingSegments = {}, nextSegmentIdx = 0;
+let turnSegments = [];
+let callTotalChars = 0, callTtsChars = 0, callTurns = 0;
+let callCostFull = 0, callCostHybrid = 0, callPrePct = 0, callCachePct = 0;
+let callAvgSttMs = 0, callAvgLlmMs = 0, callAvgTtsMs = 0, callAvgTtfbMs = 0;
+
+const AGENTS = {
+  insurance: { name:"Priya",  company:"HealthFirst Insurance", init:"P", color:"linear-gradient(145deg,#6366f1,#8b5cf6)" },
+  banking:   { name:"Arjun",  company:"SafeBank India",        init:"A", color:"linear-gradient(145deg,#0ea5e9,#0284c7)" },
+  payments:  { name:"Maya",   company:"PayCentral",            init:"M", color:"linear-gradient(145deg,#f59e0b,#d97706)" },
+};
+let currentAgent = "insurance";
+
+const waveformEl = document.getElementById("waveform");
+for (let i = 0; i < WBARS; i++) {
+  const b = document.createElement("div");
+  b.className = "wbar"; b.id = `wb${i}`;
+  waveformEl.appendChild(b);
+}
+
+function selectAgent(card) {
+  if (callActive) return;
+  document.querySelectorAll(".agent-card").forEach(c => c.classList.remove("selected"));
+  card.classList.add("selected");
+  currentAgent = card.dataset.agent;
+  const info = AGENTS[currentAgent];
+  document.getElementById("agent-name").textContent    = info.name;
+  document.getElementById("agent-company").textContent = info.company;
+  document.getElementById("avatar-circle").textContent = info.init;
+  document.getElementById("avatar-circle").style.background = info.color;
+  clearSubtitles();
+  document.getElementById("avrs-metrics").innerHTML = "";
+}
+
+async function startCall() {
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { sampleRate: MIC_SR, channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+  } catch { setCallState("Microphone access denied", false); return; }
+
+  captureCtx = new AudioContext({ sampleRate: MIC_SR });
+  const src  = captureCtx.createMediaStreamSource(micStream);
+  analyser   = captureCtx.createAnalyser();
+  analyser.fftSize = 64;
+  src.connect(analyser);
+  processor = captureCtx.createScriptProcessor(1024, 1, 1);
+  processor.onaudioprocess = onAudioChunk;
+  src.connect(processor);
+  processor.connect(captureCtx.destination);
+
+  playCtx      = new AudioContext();
+  nextPlayTime = 0;
+
+  callTotalChars = 0; callTtsChars = 0; callTurns = 0;
+  callCostFull   = 0; callCostHybrid = 0;
+  callPrePct     = 0; callCachePct   = 0;
+  callAvgSttMs   = 0; callAvgLlmMs   = 0; callAvgTtsMs = 0; callAvgTtfbMs = 0;
+  turnSegments   = [];
+
+  ws = new WebSocket(`${WS_BASE}/v1/stream?agent=${currentAgent}&model=kokoro`);
+  ws.onopen    = onWsOpen;
+  ws.onmessage = onWsMessage;
+  ws.onerror   = () => setCallState("Connection error", false);
+  ws.onclose   = () => { if (callActive) endCall(); };
+
+  callActive = true;
+  showActiveUI();
+  setCallState("Connecting…", false);
+  startWaveformLoop();
+}
+
+function endCall() {
+  callActive = false;
+  stopAllAudio();
+  if (processor)   { processor.disconnect(); processor = null; }
+  if (analyser)    { analyser.disconnect();  analyser = null; }
+  if (captureCtx)  { captureCtx.close();    captureCtx = null; }
+  if (micStream)   { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  if (playCtx)     { playCtx.close();       playCtx = null; }
+  if (ws)          { ws.close();            ws = null; }
+  if (rafHandle)   { cancelAnimationFrame(rafHandle); rafHandle = null; }
+  stopTimer();
+  resetVAD();
+  setWaveformFlat();
+  showSummary();
+}
+
+function resetToIdle() {
+  document.getElementById("summary").classList.remove("show");
+  document.getElementById("corpus-opps-section").style.display = "none";
+  document.getElementById("corpus-success").classList.remove("show");
+  document.getElementById("sum-latency-section").style.display = "none";
+  _corpusRecs = [];
+  showIdleUI();
+  setCallState("AI Voice Agent · AVRS", false);
+  setConn(false);
+  clearSubtitles();
+  setRings("none");
+  document.getElementById("avrs-metrics").innerHTML = "";
+  document.getElementById("colour-key").style.display = "none";
+  document.getElementById("history").innerHTML = "";
+  document.getElementById("history").classList.remove("show");
+  document.getElementById("call-timer").style.display = "none";
+  document.getElementById("call-timer").textContent   = "00:00";
+  timerSecs = 0;
+}
+
+function onWsOpen() {
+  setConn(true);
+  setCallState("Connected — speak anytime", true);
+  startTimer();
+}
+
+function onWsMessage(ev) {
+  let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+  switch (msg.type) {
+    case "conversation.item.input_audio_transcription.completed":
+      showSubtitle("user", msg.transcript || "");
+      addHistoryRow("user", msg.transcript || "");
+      break;
+    case "response.creating":
+      turnSegments = [];
+      pendingSegments = {}; nextSegmentIdx = 0;
+      showTyping(true);
+      setRings("agent");
+      setCallState("Thinking…", true);
+      document.getElementById("sub-agent").innerHTML = "";
+      document.getElementById("sub-agent").classList.remove("show");
+      break;
+    case "response.audio.delta":
+      showTyping(false);
+      if (msg.text && msg.mode) {
+        turnSegments.push({ text: msg.text, mode: msg.mode });
+        buildAgentSubtitle();
+      }
+      enqueueAudio(msg.segment_idx ?? nextSegmentIdx, msg.data);
+      break;
+    case "response.done":
+      showTyping(false);
+      if (msg.metrics) { renderMetricsChips(msg.metrics); accumulateCallMetrics(msg.metrics); }
+      if (turnSegments.length) {
+        addHistoryRow("agent", null, turnSegments);
+        turnSegments = [];
+        document.getElementById("colour-key").style.display = "flex";
+      }
+      if (!agentSpeaking) { setRings("none"); setCallState("Listening — speak anytime", true); }
+      break;
+    case "error":
+      showTyping(false);
+      setCallState("Error: " + (msg.message || "unknown"), false);
+      setRings("none");
+      break;
+  }
+}
+
+function onAudioChunk(e) {
+  if (!callActive || !ws || ws.readyState !== WebSocket.OPEN || muted) return;
+  const f32 = e.inputBuffer.getChannelData(0);
+  const rms  = Math.sqrt(f32.reduce((s, v) => s + v * v, 0) / f32.length);
+  if (rms > VAD_THRESH) {
+    speechChunks++; silenceChunks = 0;
+    if (!userSpeaking && speechChunks >= SPEECH_ON) { userSpeaking = true; onSpeechStart(); }
+  } else {
+    silenceChunks++; speechChunks = 0;
+    if (userSpeaking && silenceChunks >= SILENCE_END) { userSpeaking = false; onSpeechEnd(); }
+  }
+  if (userSpeaking) {
+    const i16 = float32ToInt16(f32);
+    audioBuffer.push(i16);
+    ws.send(JSON.stringify({ type: "input_audio_buffer.append", audio: bufToBase64(i16.buffer) }));
+  }
+}
+
+function onSpeechStart() {
+  if (agentSpeaking) {
+    stopAllAudio(); playQueue = [];
+    setRings("none");
+    document.getElementById("sub-agent").innerHTML = "";
+    document.getElementById("sub-agent").classList.remove("show");
+  }
+  setRings("user");
+  setCallState("Listening…", true);
+  document.getElementById("sub-user").innerHTML = "";
+  document.getElementById("sub-user").classList.remove("show");
+}
+
+function onSpeechEnd() {
+  setRings("none");
+  setCallState("Processing…", true);
+  ws.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+  audioBuffer = [];
+}
+
+function resetVAD() { speechChunks = 0; silenceChunks = 0; userSpeaking = false; audioBuffer = []; }
+
+async function enqueueAudio(idx, b64wav) {
+  if (!playCtx) return;
+  const binary = atob(b64wav);
+  const bytes  = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  let buf;
+  try { buf = await playCtx.decodeAudioData(bytes.buffer.slice(0)); } catch { return; }
+  pendingSegments[idx] = buf;
+  while (nextSegmentIdx in pendingSegments) {
+    playQueue.push(pendingSegments[nextSegmentIdx]);
+    delete pendingSegments[nextSegmentIdx];
+    nextSegmentIdx++;
+  }
+  if (!agentSpeaking) drainQueue();
+}
+
+function drainQueue() {
+  if (!playCtx || playQueue.length === 0) {
+    agentSpeaking = false;
+    if (callActive) { setRings("none"); setCallState("Listening — speak anytime", true); }
+    return;
+  }
+  agentSpeaking = true;
+  setRings("agent");
+  const buf  = playQueue.shift();
+  const node = playCtx.createBufferSource();
+  node.buffer = buf;
+  node.connect(playCtx.destination);
+  const start = Math.max(playCtx.currentTime, nextPlayTime);
+  node.start(start);
+  nextPlayTime = start + buf.duration;
+  playNode     = node;
+  node.onended = drainQueue;
+}
+
+function stopAllAudio() {
+  if (playNode) { try { playNode.stop(); } catch {} playNode = null; }
+  agentSpeaking = false; nextPlayTime = 0;
+  playQueue = []; pendingSegments = {}; nextSegmentIdx = 0;
+}
+
+function segClass(mode) {
+  if (mode === "prerecorded") return "seg-pre";
+  if (mode === "cached")      return "seg-cache";
+  return "seg-tts";
+}
+
+function buildColoredHTML(segments) {
+  return segments
+    .map(s => { const t = (s.text || "").trim(); return t ? `<span class="${segClass(s.mode)}">${escHtml(t)}</span>` : ""; })
+    .filter(Boolean).join(" ");
+}
+
+function escHtml(t) {
+  return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function showSubtitle(who, text) {
+  const el = document.getElementById(who === "user" ? "sub-user" : "sub-agent");
+  el.textContent = text; el.classList.add("show");
+}
+
+function buildAgentSubtitle() {
+  const el = document.getElementById("sub-agent");
+  el.innerHTML = buildColoredHTML(turnSegments); el.classList.add("show");
+}
+
+function clearSubtitles() {
+  ["sub-user","sub-agent"].forEach(id => {
+    const el = document.getElementById(id);
+    el.innerHTML = ""; el.classList.remove("show");
+  });
+  showTyping(false);
+}
+
+function addHistoryRow(who, text, segments) {
+  const hist = document.getElementById("history");
+  if (!hist.classList.contains("show")) hist.classList.add("show");
+  const info  = AGENTS[currentAgent];
+  const label = who === "user" ? "You" : info.name;
+  const row   = document.createElement("div");
+  row.className = `hist-row ${who}`;
+  const inner = who === "agent" && segments ? buildColoredHTML(segments) : escHtml(text || "");
+  row.innerHTML = `<div class="hist-label">${label}</div><div class="hist-bubble">${inner}</div>`;
+  hist.appendChild(row);
+  hist.scrollTop = hist.scrollHeight;
+}
+
+function renderMetricsChips({ cost_reduction_pct, prerecorded_pct, cached_pct, tts_chars_pct,
+                               stt_ms, llm_ms, tts_ms, ttfb_ms }) {
+  const pre   = Math.round(prerecorded_pct || 0);
+  const cache = Math.round(cached_pct || 0);
+  const tts   = Math.round(tts_chars_pct || 0);
+  const cost  = parseFloat(cost_reduction_pct || 0).toFixed(0);
+  const chips = [];
+  if (pre)   chips.push(`<span class="chip chip-pre">&#128252; ${pre}%</span>`);
+  if (cache) chips.push(`<span class="chip chip-cache">&#128190; ${cache}%</span>`);
+  if (tts)   chips.push(`<span class="chip chip-tts">&#127908; ${tts}%</span>`);
+  chips.push(`<span class="chip chip-meta">cost&#8595;${cost}%</span>`);
+  if (ttfb_ms) {
+    chips.push(`<span class="chip chip-meta" title="STT ${Math.round(stt_ms||0)}ms + LLM ${Math.round(llm_ms||0)}ms + TTS ${Math.round(tts_ms||0)}ms">TTFB ${Math.round(ttfb_ms)}ms</span>`);
+  }
+  document.getElementById("avrs-metrics").innerHTML = chips.join("");
+}
+
+function accumulateCallMetrics(m) {
+  callTurns++;
+  callTotalChars += m.total_chars        || 0;
+  callTtsChars   += m.tts_chars          || 0;
+  callCostFull   += m.cost_full_tts_usd  || 0;
+  callCostHybrid += m.cost_hybrid_usd    || 0;
+  const n = callTurns, p = n - 1;
+  callPrePct    = (callPrePct    * p + (m.prerecorded_pct || 0)) / n;
+  callCachePct  = (callCachePct  * p + (m.cached_pct      || 0)) / n;
+  if (m.stt_ms || m.llm_ms || m.ttfb_ms) {
+    callAvgSttMs  = (callAvgSttMs  * p + (m.stt_ms  || 0)) / n;
+    callAvgLlmMs  = (callAvgLlmMs  * p + (m.llm_ms  || 0)) / n;
+    callAvgTtsMs  = (callAvgTtsMs  * p + (m.tts_ms  || 0)) / n;
+    callAvgTtfbMs = (callAvgTtfbMs * p + (m.ttfb_ms || 0)) / n;
+  }
+}
+
+function showSummary() {
+  if (callTurns === 0) { resetToIdle(); return; }
+  const info = AGENTS[currentAgent];
+  document.getElementById("sum-agent-badge").textContent  = `${info.name} · ${info.company}`;
+  document.getElementById("sum-dur-badge").textContent    = fmtTime(timerSecs);
+  document.getElementById("sum-turns-badge").textContent  = `${callTurns} turn${callTurns !== 1 ? "s" : ""}`;
+  const pre   = Math.round(callPrePct);
+  const cache = Math.round(callCachePct);
+  const tts   = Math.max(0, 100 - pre - cache);
+  document.getElementById("rb-pre").style.width   = pre   + "%";
+  document.getElementById("rb-cache").style.width = cache + "%";
+  document.getElementById("rb-tts").style.width   = tts   + "%";
+  document.getElementById("rl-pre").textContent   = pre   + "%";
+  document.getElementById("rl-cache").textContent = cache + "%";
+  document.getElementById("rl-tts").textContent   = tts   + "%";
+  const elCost   = callTotalChars * EL_RATE;
+  const avrsCost = callTtsChars   * EL_RATE;
+  const saved    = elCost - avrsCost;
+  const savedPct = elCost > 0 ? ((saved / elCost) * 100).toFixed(0) : 0;
+  document.getElementById("sum-el-cost").textContent    = fmtUsd(elCost);
+  document.getElementById("sum-avrs-cost").textContent  = fmtUsd(avrsCost);
+  document.getElementById("sum-saved").textContent      = fmtUsd(saved);
+  document.getElementById("sum-saved-pct").textContent  = `${savedPct}% reduction`;
+  document.getElementById("sum-tts-chars").textContent  = callTtsChars.toLocaleString();
+  document.getElementById("sum-total-chars").textContent = callTotalChars.toLocaleString();
+  // Latency breakdown
+  if (callAvgTtfbMs > 0) {
+    const total = callAvgSttMs + callAvgLlmMs + callAvgTtsMs || 1;
+    document.getElementById("lb-stt").style.width = ((callAvgSttMs / total) * 100).toFixed(1) + "%";
+    document.getElementById("lb-llm").style.width = ((callAvgLlmMs / total) * 100).toFixed(1) + "%";
+    document.getElementById("lb-tts").style.width = ((callAvgTtsMs / total) * 100).toFixed(1) + "%";
+    document.getElementById("sum-stt-ms").textContent  = Math.round(callAvgSttMs)  + "ms";
+    document.getElementById("sum-llm-ms").textContent  = Math.round(callAvgLlmMs)  + "ms";
+    document.getElementById("sum-tts-ms").textContent  = Math.round(callAvgTtsMs)  + "ms";
+    document.getElementById("sum-ttfb-ms").textContent = Math.round(callAvgTtfbMs) + "ms";
+    document.getElementById("sum-latency-section").style.display = "block";
+  }
+
+  window._callData = { totalChars: callTotalChars, ttsChars: callTtsChars, turns: callTurns };
+  updateCalc();
+  fetchCorpusRecommendations();
+  document.getElementById("summary").classList.add("show");
+}
+
+function updateCalc() {
+  const cd = window._callData;
+  if (!cd) return;
+  const daily  = Math.max(1, parseInt(document.getElementById("calc-daily").value)  || 1000);
+  const months = Math.max(1, parseInt(document.getElementById("calc-months").value) || 1);
+  const calls  = daily * 30 * months;
+  const elMonthly    = calls * cd.totalChars * EL_RATE;
+  const infraMonthly = daily <= 2000 ? 50 : daily <= 20000 ? 200 : daily <= 100000 ? 800 : daily <= 500000 ? 3000 : 10000;
+  const avrsApiCost  = calls * cd.ttsChars * EL_RATE;
+  const avrsMonthly  = avrsApiCost + infraMonthly * months;
+  const savings      = elMonthly - avrsMonthly;
+  const savingsPct   = elMonthly > 0 ? ((savings / elMonthly) * 100).toFixed(0) : 0;
+  const rows = [
+    { label:"Total calls",       el:calls.toLocaleString(),                          avrs:calls.toLocaleString(),                             save:"—",                                        elCls:"",        avrsCls:"",         saveCls:"" },
+    { label:"Chars synthesised", el:(calls*cd.totalChars).toLocaleString(),          avrs:(calls*cd.ttsChars).toLocaleString(),               save:(calls*(cd.totalChars-cd.ttsChars)).toLocaleString(), elCls:"val-el", avrsCls:"val-avrs", saveCls:"val-save" },
+    { label:"TTS API cost",      el:fmtUsd(elMonthly),                               avrs:fmtUsd(avrsApiCost),                                save:fmtUsd(elMonthly-avrsApiCost),              elCls:"val-el", avrsCls:"val-avrs", saveCls:"val-save" },
+    { label:"Infrastructure",    el:"—",                                              avrs:fmtUsd(infraMonthly*months),                        save:"—",                                        elCls:"",        avrsCls:"val-avrs", saveCls:"" },
+    { label:"Total cost",        el:fmtUsd(elMonthly),                               avrs:fmtUsd(avrsMonthly),                                save:`${fmtUsd(savings)} (${savingsPct}%)`,      elCls:"val-el", avrsCls:"val-avrs", saveCls:"val-save" },
+  ];
+  document.getElementById("calc-body").innerHTML = rows.map(r =>
+    `<tr><td class="row-label">${r.label}</td><td class="${r.elCls}">${r.el}</td><td class="${r.avrsCls}">${r.avrs}</td><td class="${r.saveCls}">${r.save}</td></tr>`
+  ).join("");
+}
+
+// ── Corpus Opportunities ──────────────────────────────────────────────────
+let _corpusRecs = [];
+
+async function fetchCorpusRecommendations() {
+  const section = document.getElementById("corpus-opps-section");
+  const body    = document.getElementById("corpus-opps-body");
+  const success = document.getElementById("corpus-success");
+  section.style.display = "block";
+  success.classList.remove("show");
+  body.innerHTML = '<div class="corpus-status">Loading recommendations…</div>';
+  _corpusRecs = [];
+
+  try {
+    const resp = await fetch(`/v1/corpus/${currentAgent}/recommendations`);
+    if (!resp.ok) throw new Error(resp.statusText);
+    const data = await resp.json();
+    _corpusRecs = data.recommendations || [];
+    renderCorpusRecs();
+  } catch {
+    body.innerHTML = '<div class="corpus-status">Could not load recommendations.</div>';
+  }
+}
+
+function renderCorpusRecs() {
+  const body = document.getElementById("corpus-opps-body");
+  if (!_corpusRecs.length) {
+    body.innerHTML = '<div class="corpus-status">No new opportunities — corpus coverage looks good!</div>';
+    return;
+  }
+  const items = _corpusRecs.map((r, i) => {
+    const impact  = Math.round((r.impact_score || 0) * 100);
+    const nearest = r.nearest_corpus
+      ? `<div class="corpus-match-text">Nearest match: "${escHtml(r.nearest_corpus)}" (${Math.round((r.nearest_ratio || 0) * 100)}%)</div>`
+      : "";
+    return `<div class="corpus-item" id="corpus-item-${i}">
+      <div class="corpus-item-top">
+        <div class="corpus-phrase">${escHtml(r.text)}</div>
+        <button class="corpus-add-btn" id="corpus-add-${i}" onclick="addPhraseToCorpus(${i})">Add</button>
+      </div>
+      <div class="corpus-meta">
+        <span class="corpus-freq-badge">${r.frequency}× seen</span>
+        <span class="corpus-impact-badge">impact ${impact}%</span>
+        <span class="corpus-impact-badge">${r.char_count} chars</span>
+      </div>
+      ${nearest}
+    </div>`;
+  }).join("");
+  const addAllBtn = _corpusRecs.length > 1
+    ? `<button class="corpus-add-all-btn" id="corpus-add-all-btn" onclick="addAllToCorpus()">Add All ${_corpusRecs.length} Phrases to Corpus</button>`
+    : "";
+  body.innerHTML = items + addAllBtn;
+}
+
+async function addPhraseToCorpus(idx) {
+  const rec = _corpusRecs[idx];
+  if (!rec) return;
+  const btn = document.getElementById(`corpus-add-${idx}`);
+  btn.disabled = true; btn.textContent = "Adding…";
+  try {
+    const resp = await fetch(`/v1/corpus/${currentAgent}/add_phrases`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phrases: [rec.text] }),
+    });
+    if (!resp.ok) throw new Error();
+    btn.textContent = "✓ Added";
+    btn.classList.add("added");
+    _corpusRecs.splice(idx, 1);
+    showCorpusSuccess(1);
+    setTimeout(renderCorpusRecs, 900);
+  } catch {
+    btn.disabled = false; btn.textContent = "Retry";
+  }
+}
+
+async function addAllToCorpus() {
+  if (!_corpusRecs.length) return;
+  const allBtn = document.getElementById("corpus-add-all-btn");
+  if (allBtn) { allBtn.disabled = true; allBtn.textContent = "Adding…"; }
+  _corpusRecs.forEach((_, i) => {
+    const b = document.getElementById(`corpus-add-${i}`);
+    if (b) b.disabled = true;
+  });
+  try {
+    const phrases = _corpusRecs.map(r => r.text);
+    const resp = await fetch(`/v1/corpus/${currentAgent}/add_phrases`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phrases }),
+    });
+    if (!resp.ok) throw new Error();
+    const count = _corpusRecs.length;
+    _corpusRecs = [];
+    showCorpusSuccess(count);
+    renderCorpusRecs();
+  } catch {
+    if (allBtn) { allBtn.disabled = false; allBtn.textContent = `Add All ${_corpusRecs.length} Phrases to Corpus`; }
+    _corpusRecs.forEach((_, i) => {
+      const b = document.getElementById(`corpus-add-${i}`);
+      if (b) b.disabled = false;
+    });
+  }
+}
+
+function showCorpusSuccess(count) {
+  const el = document.getElementById("corpus-success");
+  el.textContent = `✓ ${count} phrase${count !== 1 ? "s" : ""} added — future calls will use pre-recorded audio.`;
+  el.classList.add("show");
+}
+
+function startWaveformLoop() {
+  const bufArr = new Uint8Array(analyser ? analyser.frequencyBinCount : 0);
+  function loop() {
+    rafHandle = requestAnimationFrame(loop);
+    if (!analyser) return;
+    analyser.getByteFrequencyData(bufArr);
+    const half = Math.floor(WBARS / 2);
+    for (let i = 0; i < half; i++) {
+      const fi = Math.floor((i / half) * bufArr.length);
+      const v  = bufArr[fi] / 255;
+      const h  = Math.max(3, Math.round(v * 34));
+      const col = userSpeaking ? "#6366f1" : agentSpeaking ? "#8b5cf6" : "#334155";
+      const b1 = document.getElementById(`wb${half - 1 - i}`);
+      const b2 = document.getElementById(`wb${half + i}`);
+      if (b1) { b1.style.height = h + "px"; b1.style.background = col; }
+      if (b2) { b2.style.height = h + "px"; b2.style.background = col; }
+    }
+  }
+  rafHandle = requestAnimationFrame(loop);
+}
+
+function setWaveformFlat() {
+  for (let i = 0; i < WBARS; i++) {
+    const b = document.getElementById(`wb${i}`);
+    if (b) { b.style.height = "3px"; b.style.background = "var(--dim)"; }
+  }
+}
+
+function setConn(live) {
+  const pill = document.getElementById("conn-pill");
+  pill.className = "conn-pill" + (live ? " live" : "");
+  document.getElementById("conn-text").textContent = live ? "Live" : "Disconnected";
+}
+
+function setCallState(msg, active) {
+  const el = document.getElementById("call-state");
+  el.textContent = msg;
+  el.className   = "call-state" + (active ? " active" : "");
+}
+
+function setRings(mode) {
+  document.getElementById("avatar-section").className =
+    "avatar-section" + (mode === "agent" ? " agent-speaking" : mode === "user" ? " user-speaking" : "");
+}
+
+function showTyping(show) {
+  document.getElementById("typing-dots").classList.toggle("show", show);
+}
+
+function toggleMute() {
+  muted = !muted;
+  const btn = document.getElementById("mute-btn");
+  btn.classList.toggle("muted", muted);
+  document.getElementById("mute-icon").innerHTML = muted
+    ? '<path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/>'
+    : '<path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>';
+}
+
+function showActiveUI() {
+  document.getElementById("screen").classList.add("active");
+  document.getElementById("pre-controls").style.display    = "none";
+  document.getElementById("active-controls").style.display = "flex";
+  document.getElementById("agent-picker").classList.add("hidden");
+  document.getElementById("call-timer").style.display = "block";
+  document.getElementById("history").innerHTML = "";
+  document.getElementById("history").classList.remove("show");
+  document.getElementById("colour-key").style.display = "none";
+}
+
+function showIdleUI() {
+  document.getElementById("screen").classList.remove("active");
+  document.getElementById("pre-controls").style.display    = "block";
+  document.getElementById("active-controls").style.display = "none";
+  document.getElementById("agent-picker").classList.remove("hidden");
+}
+
+function startTimer() {
+  timerSecs = 0;
+  timerHandle = setInterval(() => {
+    timerSecs++;
+    document.getElementById("call-timer").textContent = fmtTime(timerSecs);
+  }, 1000);
+}
+
+function stopTimer() { if (timerHandle) { clearInterval(timerHandle); timerHandle = null; } }
+
+function float32ToInt16(f32) {
+  const i16 = new Int16Array(f32.length);
+  for (let i = 0; i < f32.length; i++)
+    i16[i] = Math.max(-32768, Math.min(32767, Math.round(f32[i] * 32767)));
+  return i16;
+}
+
+function bufToBase64(ab) {
+  let bin = ""; const bytes = new Uint8Array(ab);
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+
+function fmtUsd(v) {
+  if (v >= 1000) return "$" + (v / 1000).toFixed(1) + "k";
+  if (v >= 1)    return "$" + v.toFixed(2);
+  return "$" + v.toFixed(4);
+}
+
+function fmtTime(s) {
+  return String(Math.floor(s/60)).padStart(2,"0") + ":" + String(s%60).padStart(2,"0");
+}
+</script>
+</body>
+</html>
