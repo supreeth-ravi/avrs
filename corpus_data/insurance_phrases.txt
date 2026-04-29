@@ -1,0 +1,77 @@
+# HealthFirst Insurance — static corpus phrases
+# RULE: complete, grammatically whole sentences only.
+# Fragments (ending with "is", "was", "on", "of") cause wrong
+# pitch contour when synthesised in isolation — keep out.
+
+# Greetings
+Hello, thank you for calling HealthFirst Insurance.
+Welcome to HealthFirst Insurance. I am Priya and I will assist you today.
+Good morning, how may I assist you today?
+Good afternoon, how may I assist you today?
+Good evening, how may I assist you today?
+How may I assist you today?
+I will be happy to help you with that.
+Please give me a moment to check your details.
+Let me pull up your policy information right away.
+One moment please.
+I can see your account here.
+
+# Policy status
+Your policy is currently active.
+Your policy has expired.
+Your policy is due for renewal.
+Your policy has been cancelled.
+Your policy is active and in good standing.
+Your coverage is valid.
+
+# Premium
+Your premium payment was successful.
+Your premium has been processed.
+Your premium is overdue.
+Would you like to set up automatic payments?
+Your premium payment is pending.
+
+# Claims
+Your claim has been submitted successfully.
+Your claim is currently under review.
+Your claim has been approved.
+Your claim has been settled.
+Your claim has been rejected.
+We require your discharge summary and bills for your claim.
+Please submit your documents to process your claim.
+We have received your claim documents.
+
+# Renewals
+Your policy is due for renewal.
+Would you like to renew your policy today?
+Your policy has been renewed successfully.
+A renewal confirmation will be sent to your registered email.
+
+# Motor insurance
+Your vehicle insurance is active.
+
+# Documents and information
+Your policy document has been sent to your registered email.
+We will send you a confirmation via SMS.
+
+# Empathy and transitions
+I understand your concern.
+I apologize for the inconvenience.
+Thank you for your patience.
+We value your trust in HealthFirst Insurance.
+I will escalate this to our specialist team.
+Let me connect you with our claims specialist.
+Please stay on the line.
+
+# Network hospitals
+Apollo Hospital is part of our network hospitals.
+You are eligible for cashless treatment at this hospital.
+
+# Closings
+Is there anything else I can help you with today?
+Is there anything else I can assist you with?
+Thank you for calling HealthFirst Insurance.
+Have a wonderful day.
+Take care, goodbye.
+We appreciate your business.
+It was a pleasure assisting you today.

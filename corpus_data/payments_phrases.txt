@@ -1,0 +1,38 @@
+# PayCentral — static phrase fragments
+
+Hello, welcome to PayCentral. I am Maya and I will help you today.
+How can I assist you with your payments?
+Please give me a moment to check your transaction.
+
+# Payment confirmations
+Your payment of
+to
+was confirmed successfully.
+is pending processing.
+has been declined.
+Your transaction ID is
+Amount debited from
+Amount credited to
+
+# Refunds
+Your refund of
+has been initiated.
+will be credited within
+to
+Your refund reference number is
+We have processed your refund request.
+
+# Wallet
+Your wallet balance is
+Your wallet has been credited with
+Your wallet transaction was successful.
+
+# Merchant payments
+Your payment to
+was processed successfully.
+is being verified by the merchant.
+
+# Closings
+Is there anything else I can help you with?
+Thank you for using PayCentral.
+Have a great day.

@@ -1,0 +1,58 @@
+# SafeBank India — static phrase fragments
+
+Hello, thank you for calling SafeBank India. I am Arjun and I will assist you.
+Good morning, welcome to SafeBank India.
+How may I assist you with your account today?
+Please give me a moment to access your account.
+I can see your account details here.
+
+# Account
+Your account is active.
+Your savings account balance is
+Your current account balance is
+Your account number is
+Your account was last accessed on
+Your account has been debited by
+Your account has been credited with
+
+# Transactions
+Your transaction
+was successful.
+has been processed.
+is pending.
+has been declined.
+Your last transaction of
+was made on
+Your transaction reference number is
+
+# EMI and loans
+Your EMI of
+is due on
+Your loan account number is
+Your outstanding loan balance is
+Your next EMI date is
+Your EMI has been auto-debited successfully.
+
+# Cards
+Your credit card limit is
+Your available credit limit is
+Your credit card bill of
+is due on
+Your card ending in
+Your card has been blocked as requested.
+Your card has been unblocked.
+A new card will be delivered within
+
+# UPI and payments
+Your UPI transaction of
+was credited to
+Your UPI ID is
+Your payment of
+to
+was successful.
+
+# Closings
+Is there anything else I can help you with?
+Thank you for banking with SafeBank India.
+Have a great day.
+We appreciate your loyalty.
