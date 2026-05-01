@@ -1,0 +1,12 @@
+services:
+  avrs:
+    build: .
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    volumes:
+      - ./models:/app/models    # Kokoro model files (populated by download-models)
+      - ./corpus:/app/corpus    # Prerecorded phrases (populated by build-corpus)
+      - ./cache:/app/cache      # Synthesised audio cache (grows at runtime)
+    restart: unless-stopped
