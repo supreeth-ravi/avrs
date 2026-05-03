@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Environment — never commit secrets
+.env
+
+# Models — large binaries, download via scripts/download_models.sh
+models/kokoro/*.onnx
+models/kokoro/*.bin
+
+# Generated audio — rebuilt locally
+*.wav
+!samples/*.wav
+corpus/*.wav
+corpus/insurance/
+corpus/banking/
+corpus/payments/
+corpus/index.json
+
+# Session cache — generated at runtime
+cache/insurance/
+cache/banking/
+cache/payments/
+
+# Personal recordings and test runs
+conversations/
+
+# Benchmark run outputs
+benchmark/results_*.csv
+benchmark/smoke_test_*.csv
+benchmark/test_run_*.csv
+benchmark/*.json
+
+# Generated docs (HTML/PDF built from source)
+docs/*.html
+docs/*.pdf
+
+# macOS
+.DS_Store
+
+# Misc
+*.log
+output.wav
+.pytest_cache/
+.ruff_cache/
