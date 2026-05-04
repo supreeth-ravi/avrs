@@ -16,3 +16,5 @@ pytest-asyncio
 httpx
 python-dotenv
 pyyaml
+python-multipart
+anthropic

@@ -215,7 +215,7 @@ python -m spacy download en_core_web_sm
 cp .env.example .env   # add ANTHROPIC_API_KEY
 
 python scripts/build_insurance_corpus.py
-uvicorn avrs.server:app --host 0.0.0.0 --port 8001 --reload
+uvicorn avrs.voice_api:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 ### No models? Use mock mode

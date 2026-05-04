@@ -22,6 +22,8 @@ dependencies = [
     "redis",
     "python-dotenv",
     "pyyaml",
+    "python-multipart",
+    "anthropic",
 ]
 
 [project.optional-dependencies]

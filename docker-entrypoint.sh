@@ -49,7 +49,7 @@ if [ "$COMMAND" = "serve" ]; then
     fi
 
     echo "Starting AVRS server on port 8001..."
-    exec uvicorn avrs.server:app --host 0.0.0.0 --port 8001
+    exec uvicorn avrs.voice_api:app --host 0.0.0.0 --port 8001
 fi
 
 echo "Unknown command: $COMMAND"
