@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive icon foreground — 108×108dp canvas, safe zone ≈ 66dp circle centred at 54,54.
+  Design: shield outline + 7 pill-shaped waveform bars in violet→emerald gradient.
+  Requires API 24+ (gradient in vector drawable).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- ── Shield outline ──
+         Centred at 54,54. Points: top=19, sides at x=22/86, bottom apex at y=89. -->
+    <path
+        android:pathData="M54,19
+                          C54,19 86,31 86,32
+                          L86,60
+                          C86,76 72,85 54,91
+                          C36,85 22,76 22,60
+                          L22,32
+                          C22,31 54,19 54,19 Z"
+        android:strokeColor="#00000000"
+        android:strokeWidth="0"
+        android:fillAlpha="0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="22" android:startY="19"
+                android:endX="86"   android:endY="91">
+                <item android:offset="0.0" android:color="#997C3AED"/>
+                <item android:offset="1.0" android:color="#9910B981"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Shield outline stroke (drawn as a stroked path using a thin filled path trick) -->
+    <path
+        android:pathData="M54,20
+                          C54,20 85,31.5 85,32.5
+                          L85,60
+                          C85,75.5 71.5,84.5 54,90.5
+                          C36.5,84.5 23,75.5 23,60
+                          L23,32.5
+                          C23,31.5 54,20 54,20 Z
+                          M54,21.5
+                          C54,21.5 24.5,32.5 24.5,33
+                          L24.5,60
+                          C24.5,74.5 37,83 54,89
+                          C71,83 83.5,74.5 83.5,60
+                          L83.5,33
+                          C83.5,32.5 54,21.5 54,21.5 Z"
+        android:fillAlpha="0.6">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="22" android:startY="19"
+                android:endX="86"   android:endY="91">
+                <item android:offset="0.0" android:color="#7C3AED"/>
+                <item android:offset="1.0" android:color="#10B981"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!--
+      Waveform bars: 7 rounded rects, bell-curve heights, centred at 54,55.
+      bar width = 5.5  gap = 3.5  total width = 7*5.5 + 6*3.5 = 59.5
+      start x = 54 - 59.5/2 = 24.25
+      x positions (left edge): 24.25  33.25  42.25  51.25  60.25  69.25  78.25
+
+      Heights (px) and tops (centred at y=55):
+        14 → top=48.0   22 → top=44.0   30 → top=40.0   36 → top=37.0
+                                                          (mirror for bars 5-7)
+    -->
+
+    <!-- Bar 1  h=14 -->
+    <path android:pathData="M24.25,48 L24.25,59.25 Q24.25,62 27,62 L27.75,62 Q30.5,62 30.5,59.25 L30.5,48 Q30.5,45.25 27.75,45.25 L27,45.25 Q24.25,45.25 24.25,48 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="24.25" android:startY="0" android:endX="83.75" android:endY="0">
+                <item android:offset="0.0" android:color="#7C3AED"/>
+                <item android:offset="0.5" android:color="#9D5BF5"/>
+                <item android:offset="1.0" android:color="#10B981"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bar 2  h=22 -->
+    <path android:pathData="M33.25,44 L33.25,63.25 Q33.25,66 36,66 L36.75,66 Q39.5,66 39.5,63.25 L39.5,44 Q39.5,41.25 36.75,41.25 L36,41.25 Q33.25,41.25 33.25,44 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="24.25" android:startY="0" android:endX="83.75" android:endY="0">
+                <item android:offset="0.0" android:color="#7C3AED"/>
+                <item android:offset="0.5" android:color="#9D5BF5"/>
+                <item android:offset="1.0" android:color="#10B981"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bar 3  h=30 -->
+    <path android:pathData="M42.25,40 L42.25,67.25 Q42.25,70 45,70 L45.75,70 Q48.5,70 48.5,67.25 L48.5,40 Q48.5,37.25 45.75,37.25 L45,37.25 Q42.25,37.25 42.25,40 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="24.25" android:startY="0" android:endX="83.75" android:endY="0">
+                <item android:offset="0.0" android:color="#7C3AED"/>
+                <item android:offset="0.5" android:color="#9D5BF5"/>
+                <item android:offset="1.0" android:color="#10B981"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bar 4  h=36 (centre, tallest) -->
+    <path android:pathData="M51.25,37 L51.25,70.25 Q51.25,73 54,73 L54.75,73 Q57.5,73 57.5,70.25 L57.5,37 Q57.5,34.25 54.75,34.25 L54,34.25 Q51.25,34.25 51.25,37 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="24.25" android:startY="0" android:endX="83.75" android:endY="0">
+                <item android:offset="0.0" android:color="#7C3AED"/>
+                <item android:offset="0.5" android:color="#9D5BF5"/>
+                <item android:offset="1.0" android:color="#10B981"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bar 5  h=30 -->
+    <path android:pathData="M60.25,40 L60.25,67.25 Q60.25,70 63,70 L63.75,70 Q66.5,70 66.5,67.25 L66.5,40 Q66.5,37.25 63.75,37.25 L63,37.25 Q60.25,37.25 60.25,40 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="24.25" android:startY="0" android:endX="83.75" android:endY="0">
+                <item android:offset="0.0" android:color="#7C3AED"/>
+                <item android:offset="0.5" android:color="#9D5BF5"/>
+                <item android:offset="1.0" android:color="#10B981"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bar 6  h=22 -->
+    <path android:pathData="M69.25,44 L69.25,63.25 Q69.25,66 72,66 L72.75,66 Q75.5,66 75.5,63.25 L75.5,44 Q75.5,41.25 72.75,41.25 L72,41.25 Q69.25,41.25 69.25,44 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="24.25" android:startY="0" android:endX="83.75" android:endY="0">
+                <item android:offset="0.0" android:color="#7C3AED"/>
+                <item android:offset="0.5" android:color="#9D5BF5"/>
+                <item android:offset="1.0" android:color="#10B981"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bar 7  h=14 -->
+    <path android:pathData="M78.25,48 L78.25,59.25 Q78.25,62 81,62 L81.75,62 Q84.5,62 84.5,59.25 L84.5,48 Q84.5,45.25 81.75,45.25 L81,45.25 Q78.25,45.25 78.25,48 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="24.25" android:startY="0" android:endX="83.75" android:endY="0">
+                <item android:offset="0.0" android:color="#7C3AED"/>
+                <item android:offset="0.5" android:color="#9D5BF5"/>
+                <item android:offset="1.0" android:color="#10B981"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+</vector>

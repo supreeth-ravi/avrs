@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.AVRSScreener" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#08080F</item>
+        <item name="android:statusBarColor">#08080F</item>
+        <item name="android:navigationBarColor">#08080F</item>
+    </style>
+
+    <!-- Transparent overlay theme for ScreeningOverlayActivity.
+         Extends our Material theme so modern window insets are dispatched
+         correctly to Compose (unlike the old Theme.Translucent.NoTitleBar). -->
+    <style name="Theme.AVRSScreener.Overlay" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>
