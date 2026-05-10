@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 160" width="720" height="160">
+  <defs>
+    <!-- Waveform bar gradient -->
+    <linearGradient id="wg" x1="20" y1="0" x2="128" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#7C3AED"/>
+      <stop offset="50%"  stop-color="#9D5BF5"/>
+      <stop offset="100%" stop-color="#10B981"/>
+    </linearGradient>
+
+    <!-- Text gradient for "callm" -->
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#E8E0FF"/>
+      <stop offset="100%" stop-color="#CCFAE7"/>
+    </linearGradient>
+
+    <!-- Tagline colour -->
+    <linearGradient id="tagGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#7C3AED" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0.85"/>
+    </linearGradient>
+
+    <!-- Icon background -->
+    <linearGradient id="bgG" x1="0" y1="0" x2="160" y2="160" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#110C1F"/>
+      <stop offset="100%" stop-color="#06060E"/>
+    </linearGradient>
+
+    <!-- Ambient glow in icon box -->
+    <filter id="amb" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+
+    <!-- Bar glow -->
+    <filter id="bg" x="-80%" y="-60%" width="260%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Shield glow -->
+    <linearGradient id="shG" x1="20" y1="10" x2="140" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#7C3AED" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0.6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ── Icon box (160×160) ── -->
+  <rect x="0" y="0" width="160" height="160" rx="34" fill="url(#bgG)"/>
+
+  <!-- Ambient blobs -->
+  <circle cx="55"  cy="55"  r="40" fill="#7C3AED" opacity="0.25" filter="url(#amb)"/>
+  <circle cx="110" cy="115" r="35" fill="#10B981" opacity="0.20" filter="url(#amb)"/>
+
+  <!-- Shield outline (scaled to 160×160 canvas) -->
+  <path d="M80,22 C80,22 134,42 134,44 L134,84 C134,112 104,130 80,140 C56,130 26,112 26,84 L26,44 C26,42 80,22 80,22 Z"
+        fill="none" stroke="url(#shG)" stroke-width="1.2"/>
+
+  <!-- Waveform bars (7, centred at 80,80)
+       bar width=5.5  gap=3.3  total=7*5.5+6*3.3=57.3  start=80-28.65=51.35
+       heights: 14 22 30 34 30 22 14  centred at y=80 -->
+  <rect x="20"  y="73" width="5.5" height="14" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+  <rect x="28.8" y="69" width="5.5" height="22" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+  <rect x="37.6" y="65" width="5.5" height="30" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+  <rect x="46.4" y="63" width="5.5" height="34" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+  <rect x="55.2" y="65" width="5.5" height="30" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+  <rect x="64"   y="69" width="5.5" height="22" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+  <rect x="72.8" y="73" width="5.5" height="14" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+
+  <!-- Second set, right half mirrored — bars 8-14 centered more to right -->
+  <rect x="81.7" y="73" width="5.5" height="14" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+  <rect x="90.5" y="69" width="5.5" height="22" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+  <rect x="99.3" y="65" width="5.5" height="30" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+  <rect x="108.1" y="63" width="5.5" height="34" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+  <rect x="116.9" y="65" width="5.5" height="30" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+  <rect x="125.7" y="69" width="5.5" height="22" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+  <rect x="134.5" y="73" width="5.5" height="14" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
+
+  <!-- ── Wordmark ── -->
+  <!-- "callm" — large, tight-tracked, modern sans -->
+  <text x="192" y="108"
+        font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
+        font-size="88"
+        font-weight="700"
+        letter-spacing="-3"
+        fill="url(#textGrad)">callm</text>
+
+  <!-- Tagline -->
+  <text x="194" y="136"
+        font-family="'SF Pro Text', 'Helvetica Neue', Arial, sans-serif"
+        font-size="18"
+        font-weight="400"
+        letter-spacing="2.5"
+        fill="url(#tagGrad)">AI CALL SCREENING</text>
+</svg>

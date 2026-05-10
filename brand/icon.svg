@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background gradient -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#110C1F"/>
+      <stop offset="100%" stop-color="#06060E"/>
+    </linearGradient>
+
+    <!-- Waveform bar gradient — violet left → emerald right, spanning all 7 bars -->
+    <linearGradient id="waveGrad" x1="163" y1="0" x2="349" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#7C3AED"/>
+      <stop offset="50%"  stop-color="#9D5BF5"/>
+      <stop offset="100%" stop-color="#10B981"/>
+    </linearGradient>
+
+    <!-- Shield stroke gradient -->
+    <linearGradient id="shieldGrad" x1="120" y1="78" x2="392" y2="445" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#7C3AED" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0.55"/>
+    </linearGradient>
+
+    <!-- Ambient blob blur -->
+    <filter id="blob" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="52"/>
+    </filter>
+
+    <!-- Bar glow: blurred copy behind crisp source -->
+    <filter id="barGlow" x="-60%" y="-40%" width="220%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="11" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Shield soft glow -->
+    <filter id="shieldGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ── Background ── -->
+  <rect width="512" height="512" rx="110" fill="url(#bgGrad)"/>
+
+  <!-- ── Ambient colour blobs ── -->
+  <circle cx="195" cy="200" r="135" fill="#7C3AED" opacity="0.22" filter="url(#blob)"/>
+  <circle cx="330" cy="340" r="115" fill="#10B981" opacity="0.17" filter="url(#blob)"/>
+
+  <!-- ── Shield outline ── -->
+  <!--  Classic pointed-bottom shield: top-left arc, top-right arc, converges to bottom point -->
+  <path d="M256,80
+           C256,80 392,132 392,135
+           L392,270
+           C392,360 328,418 256,446
+           C184,418 120,360 120,270
+           L120,135
+           C120,132 256,80 256,80 Z"
+        fill="none"
+        stroke="url(#shieldGrad)"
+        stroke-width="2.5"
+        filter="url(#shieldGlow)"/>
+
+  <!-- ── Waveform bars (7, bell-curve profile, centred at 256 × 256) ──
+       Bar layout: width=18, gap=10, total span 163–349
+       Heights follow smooth bell: 44 72 96 110 96 72 44
+       Each bar vertically centred at y=256 → top = 256 – h/2 -->
+
+  <!-- Bar 1  h=44  top=234 -->
+  <rect x="163" y="234" width="18" height="44"  rx="9" fill="url(#waveGrad)" filter="url(#barGlow)"/>
+  <!-- Bar 2  h=72  top=220 -->
+  <rect x="191" y="220" width="18" height="72"  rx="9" fill="url(#waveGrad)" filter="url(#barGlow)"/>
+  <!-- Bar 3  h=96  top=208 -->
+  <rect x="219" y="208" width="18" height="96"  rx="9" fill="url(#waveGrad)" filter="url(#barGlow)"/>
+  <!-- Bar 4  h=110 top=201 (centre, tallest) -->
+  <rect x="247" y="201" width="18" height="110" rx="9" fill="url(#waveGrad)" filter="url(#barGlow)"/>
+  <!-- Bar 5  h=96  top=208 -->
+  <rect x="275" y="208" width="18" height="96"  rx="9" fill="url(#waveGrad)" filter="url(#barGlow)"/>
+  <!-- Bar 6  h=72  top=220 -->
+  <rect x="303" y="220" width="18" height="72"  rx="9" fill="url(#waveGrad)" filter="url(#barGlow)"/>
+  <!-- Bar 7  h=44  top=234 -->
+  <rect x="331" y="234" width="18" height="44"  rx="9" fill="url(#waveGrad)" filter="url(#barGlow)"/>
+</svg>
