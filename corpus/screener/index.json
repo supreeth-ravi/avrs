@@ -1,0 +1,50 @@
+{
+  "hello, i am handling calls for them right now.": {
+    "path": "corpus/screener/9010664573048077691.wav",
+    "text": "Hello, I am handling calls for them right now."
+  },
+  "may i know who is calling?": {
+    "path": "corpus/screener/4082862689080804861.wav",
+    "text": "May I know who is calling?"
+  },
+  "who is calling please?": {
+    "path": "corpus/screener/5764107990091729526.wav",
+    "text": "Who is calling please?"
+  },
+  "what is this call regarding?": {
+    "path": "corpus/screener/5994448319995074070.wav",
+    "text": "What is this call regarding?"
+  },
+  "could you please hold for a moment?": {
+    "path": "corpus/screener/4426815666358319197.wav",
+    "text": "Could you please hold for a moment?"
+  },
+  "thank you, let me check if they are available.": {
+    "path": "corpus/screener/975287182870059735.wav",
+    "text": "Thank you, let me check if they are available."
+  },
+  "they are not available right now. can i take a message?": {
+    "path": "corpus/screener/5848485530317089754.wav",
+    "text": "They are not available right now. Can I take a message?"
+  },
+  "i will let them know you called.": {
+    "path": "corpus/screener/5312767709495952784.wav",
+    "text": "I will let them know you called."
+  },
+  "is there anything urgent i can pass along?": {
+    "path": "corpus/screener/1809840010487284935.wav",
+    "text": "Is there anything urgent I can pass along?"
+  },
+  "thank you for calling. have a good day.": {
+    "path": "corpus/screener/6022322565003028655.wav",
+    "text": "Thank you for calling. Have a good day."
+  },
+  "this appears to be a promotional call. i will end the call now.": {
+    "path": "corpus/screener/1483521303815515898.wav",
+    "text": "This appears to be a promotional call. I will end the call now."
+  },
+  "please leave your name and purpose and they will get back to you.": {
+    "path": "corpus/screener/9033063755282918639.wav",
+    "text": "Please leave your name and purpose and they will get back to you."
+  }
+}
