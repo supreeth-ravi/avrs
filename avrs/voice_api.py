@@ -5,18 +5,36 @@ Run:
   uvicorn avrs.voice_api:app --host 0.0.0.0 --port 8000 --reload
 
 Endpoints:
-  POST   /v1/speak                        AVRS text → WAV
-  POST   /v1/transcribe                   audio WAV/PCM → transcript
-  POST   /v1/agent/sessions               start conversation session
-  POST   /v1/agent/sessions/{id}/turn     conversation turn → WAV + metrics
-  DELETE /v1/agent/sessions/{id}          end session
-  GET    /v1/agents                       list available agent personas
-  GET    /v1/voices                       list available voices
-  POST   /v1/corpus/{agent}/build         trigger corpus pre-build
-  GET    /v1/corpus/{agent}/status        corpus status
-  WS     /v1/stream                       real-time streaming conversation
-  GET    /v1/metrics                      system metrics
-  GET    /health                          health check
+  POST   /v1/auth/otp/request              request OTP for phone
+  POST   /v1/auth/otp/verify               verify OTP + create account + auto-assign number
+  GET    /v1/auth/me                       token → full user profile
+  PATCH  /v1/auth/me                       update profile (name, greeting, etc.)
+  POST   /v1/speak                         AVRS text → WAV
+  POST   /v1/transcribe                    audio WAV/PCM → transcript
+  POST   /v1/agent/sessions                start conversation session
+  POST   /v1/agent/sessions/{id}/turn      conversation turn → WAV + metrics
+  DELETE /v1/agent/sessions/{id}           end session
+  GET    /v1/agents                        list available agent personas
+  GET    /v1/voices                        list available voices
+  POST   /v1/corpus/{agent}/build          trigger corpus pre-build
+  GET    /v1/corpus/{agent}/status         corpus status
+  WS     /v1/stream                        real-time streaming conversation
+  GET    /v1/metrics                       system metrics
+  GET    /health                           health check
+  WS     /ws/exotel                        Exotel Voicebot Applet
+  WS     /ws/screen                        Android app monitor (auth-token based)
+
+Admin (protected by X-API-Key):
+  POST   /v1/admin/numbers                 add numbers to pool
+  DELETE /v1/admin/numbers/{number}        remove number from pool
+  GET    /v1/admin/numbers                 list pool
+  POST   /v1/admin/users/{id}/tier         set user pricing tier
+  POST   /v1/admin/users/{id}/enable       enable user
+  POST   /v1/admin/users/{id}/disable      disable user
+  GET    /v1/admin/users                   list all users
+  GET    /v1/admin/users/{id}              get single user
+  DELETE /v1/admin/users/{id}              delete user
+  GET    /v1/admin/analytics               usage analytics
 """
 
 from __future__ import annotations
@@ -49,6 +67,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from avrs.agent import AGENTS, AgentSession, BFSIAgent, get_store
+from avrs import exotel as exotel_mod
+from avrs import plivo as plivo_mod
+from avrs import users as users_mod
 
 # Anchor all relative paths to the project root (where pyproject.toml lives)
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -81,7 +102,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],   # so JS can read X-* response headers
+    expose_headers=["*"],
 )
 
 _STATIC_DIR = os.path.join(_PROJECT_ROOT, "static")
@@ -96,7 +117,7 @@ async def frontend() -> FileResponse:
 # Auth
 # ---------------------------------------------------------------------------
 
-_API_KEY = os.getenv("AVRS_API_KEY", "")  # empty = dev mode (no auth)
+_API_KEY = os.getenv("AVRS_API_KEY", "")
 
 
 def _verify_api_key(x_api_key: str | None = Header(default=None)) -> None:
@@ -106,6 +127,171 @@ def _verify_api_key(x_api_key: str | None = Header(default=None)) -> None:
 
 Auth = Annotated[None, Depends(_verify_api_key)]
 
+
+def _get_user_from_token(token: str | None) -> users_mod.User | None:
+    if not token:
+        return None
+    return users_mod.get_user_by_token(token)
+
+
+# ---------------------------------------------------------------------------
+# /v1/auth  —  OTP + subscriber auth
+# ---------------------------------------------------------------------------
+
+class OtpRequest(BaseModel):
+    phone_number: str = Field(..., description="User's real mobile number (e.g. +919876543210)")
+
+
+class OtpRequestResponse(BaseModel):
+    message: str
+    expires_in: int
+    # In dev mode we return the OTP so you can test without SMS
+    dev_otp: str | None = None
+
+
+@app.post("/v1/auth/otp/request", response_model=OtpRequestResponse, tags=["Auth"])
+async def auth_otp_request(req: OtpRequest) -> OtpRequestResponse:
+    """Request an OTP. In production this sends an SMS. For MVP the OTP is returned."""
+    try:
+        otp, expires = users_mod.generate_otp(req.phone_number)
+    except ValueError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+
+    # TODO: integrate Twilio / Exotel SMS here
+    # For MVP we return the OTP in the response so testing works without SMS
+    return OtpRequestResponse(
+        message="OTP sent to your phone number",
+        expires_in=users_mod.OTP_EXPIRY_SECONDS,
+        dev_otp=otp,
+    )
+
+
+class OtpVerifyRequest(BaseModel):
+    phone_number: str
+    otp: str
+    name: str = Field(default="", description="Display name (optional)")
+
+
+class OtpVerifyResponse(BaseModel):
+    user_id: str
+    auth_token: str
+    phone_number: str
+    assigned_exotel_number: str | None = None
+    onboarding_step: str
+    message: str
+
+
+@app.post("/v1/auth/otp/verify", response_model=OtpVerifyResponse, tags=["Auth"])
+async def auth_otp_verify(req: OtpVerifyRequest) -> OtpVerifyResponse:
+    """Verify OTP, create account, and auto-assign a virtual number from the pool."""
+    if not users_mod.verify_otp(req.phone_number, req.otp):
+        raise HTTPException(status_code=401, detail="Invalid or expired OTP")
+
+    # Check if user already exists
+    existing = users_mod.get_user_by_phone(req.phone_number)
+    if existing:
+        return OtpVerifyResponse(
+            user_id=existing.user_id,
+            auth_token=existing.auth_token,
+            phone_number=existing.phone_number,
+            assigned_exotel_number=existing.assigned_exotel_number,
+            onboarding_step=existing.onboarding_step,
+            message="Welcome back!",
+        )
+
+    # Create new user
+    try:
+        user = users_mod.create_user(req.phone_number, req.name)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    # Auto-assign virtual number from pool
+    assigned: str | None = None
+    try:
+        assigned = users_mod.auto_assign_number(user.user_id, region="IN")
+    except ValueError as e:
+        log.warning("No virtual numbers available for new user %s: %s", user.user_id, e)
+
+    return OtpVerifyResponse(
+        user_id=user.user_id,
+        auth_token=user.auth_token,
+        phone_number=user.phone_number,
+        assigned_exotel_number=assigned,
+        onboarding_step=user.onboarding_step,
+        message="Welcome to Pickr! Your virtual number is ready." if assigned else "Welcome to Pickr! A virtual number will be assigned shortly.",
+    )
+
+
+class MeResponse(BaseModel):
+    user_id: str
+    phone_number: str
+    name: str
+    email: str | None = None
+    assigned_exotel_number: str | None = None
+    greeting: str
+    persona: str
+    screening_mode: str
+    enabled: bool
+    pricing_tier: str
+    monthly_minutes_limit: int
+    monthly_minutes_used: float
+    onboarding_complete: bool
+    onboarding_step: str
+    settings: dict
+
+
+@app.get("/v1/auth/me", response_model=MeResponse, tags=["Auth"])
+async def auth_me(token: str = Query(..., description="Auth token")) -> MeResponse:
+    user = _get_user_from_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return MeResponse(
+        user_id=user.user_id,
+        phone_number=user.phone_number,
+        name=user.name,
+        email=user.email,
+        assigned_exotel_number=user.assigned_exotel_number,
+        greeting=user.greeting,
+        persona=user.persona,
+        screening_mode=user.screening_mode,
+        enabled=user.enabled,
+        pricing_tier=user.pricing_tier,
+        monthly_minutes_limit=user.monthly_minutes_limit,
+        monthly_minutes_used=round(user.monthly_minutes_used, 1),
+        onboarding_complete=user.onboarding_complete,
+        onboarding_step=user.onboarding_step,
+        settings=user.settings,
+    )
+
+
+class UpdateProfileRequest(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    greeting: str | None = None
+    screening_mode: str | None = None
+    persona: str | None = None
+    language: str | None = None
+    timezone: str | None = None
+    settings: dict | None = None
+
+
+@app.patch("/v1/auth/me", tags=["Auth"])
+async def auth_update_me(token: str = Query(...), req: UpdateProfileRequest = ...) -> dict:
+    user = _get_user_from_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    fields = {}
+    for field in ["name", "email", "greeting", "screening_mode", "persona", "language", "timezone", "settings"]:
+        val = getattr(req, field, None)
+        if val is not None:
+            fields[field] = val
+
+    if fields:
+        users_mod.update_user(user.user_id, **fields)
+    return {"status": "updated", "fields": list(fields.keys())}
+
+
 # ---------------------------------------------------------------------------
 # Global state
 # ---------------------------------------------------------------------------
@@ -113,17 +299,14 @@ Auth = Annotated[None, Depends(_verify_api_key)]
 _render_metrics: deque[metrics_mod.UtteranceMetrics] = deque(maxlen=500)
 _corpus_status: dict[str, str] = {}
 
-# Rolling log of TTS-rendered sentences per agent (persists across calls in-process).
-# Used to surface corpus addition candidates in the summary.
 _tts_phrase_log: dict[str, Counter] = {}
 
-# Regex to detect "too dynamic" phrases: contains IDs, amounts, phone numbers etc.
 _DYNAMIC_RE = re.compile(
-    r'\b\d{4,}\b'           # long numbers (IDs, amounts, pin codes)
-    r'|\b[A-Z]{2,}-\d+'     # codes like HS-2024, CN-20241130
-    r'|\b\+\d{7,}'          # phone numbers
-    r'|\brupees?\s+\d+'     # monetary amounts
-    r'|\b\d+\s*(?:lakh|crore|percent|%)',  # financial figures
+    r'\b\d{4,}\b'
+    r'|\b[A-Z]{2,}-\d+'
+    r'|\b\+\d{7,}'
+    r'|\brupees?\s+\d+'
+    r'|\b\d+\s*(?:lakh|crore|percent|%)',
     re.IGNORECASE,
 )
 
@@ -145,12 +328,11 @@ def _make_config(
 
 
 def _header_safe(value: str) -> str:
-    # HTTP headers must be Latin-1 single-line: collapse newlines, replace Unicode
     value = " ".join(value.splitlines())
     for old, new in [
         ("—", "--"), ("–", "-"),
-        ("‘", "'"), ("’", "'"),
-        ("“", '"'), ("”", '"'),
+        ("‘", "'"), ("'", "'"),
+        (""", '"'), (""", '"'),
         ("₹", "Rs."),
     ]:
         value = value.replace(old, new)
@@ -268,12 +450,7 @@ class StartSessionResponse(BaseModel):
     ws_url: str
 
 
-@app.post(
-    "/v1/agent/sessions",
-    response_model=StartSessionResponse,
-    summary="Start a new conversation session",
-    tags=["Agent Sessions"],
-)
+@app.post("/v1/agent/sessions", response_model=StartSessionResponse, tags=["Agent Sessions"])
 async def start_session(req: StartSessionRequest, _: Auth) -> StartSessionResponse:
     if req.agent not in AGENTS:
         raise HTTPException(status_code=400, detail=f"Unknown agent: {req.agent!r}")
@@ -297,11 +474,7 @@ class TurnRequest(BaseModel):
     speaker_ref: str | None = None
 
 
-@app.post(
-    "/v1/agent/sessions/{session_id}/turn",
-    summary="Send text or audio, receive synthesised audio response",
-    tags=["Agent Sessions"],
-)
+@app.post("/v1/agent/sessions/{session_id}/turn", tags=["Agent Sessions"])
 async def agent_turn(
     session_id: str,
     _: Auth,
@@ -315,7 +488,6 @@ async def agent_turn(
     if not session:
         raise HTTPException(status_code=404, detail=f"Session {session_id!r} not found")
 
-    # Resolve user text — from audio upload (STT) or direct text param
     user_text: str | None = text
     stt_transcript: str = ""
 
@@ -378,11 +550,7 @@ async def agent_turn(
     )
 
 
-@app.delete(
-    "/v1/agent/sessions/{session_id}",
-    summary="End a conversation session",
-    tags=["Agent Sessions"],
-)
+@app.delete("/v1/agent/sessions/{session_id}", tags=["Agent Sessions"])
 async def end_session(session_id: str, _: Auth) -> dict:
     store = get_store()
     deleted = store.delete(session_id)
@@ -392,14 +560,10 @@ async def end_session(session_id: str, _: Auth) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# /v1/corpus/{agent}/build
+# /v1/corpus
 # ---------------------------------------------------------------------------
 
-@app.post(
-    "/v1/corpus/{agent}/build",
-    summary="Pre-build the static phrase corpus for an agent",
-    tags=["Corpus"],
-)
+@app.post("/v1/corpus/{agent}/build", tags=["Corpus"])
 async def build_corpus(
     agent: str,
     _: Auth,
@@ -411,8 +575,7 @@ async def build_corpus(
 
     phrases_file = f"corpus_data/{agent}_phrases.txt"
     if not os.path.exists(phrases_file):
-        raise HTTPException(status_code=404,
-                            detail=f"Phrases file not found: {phrases_file}")
+        raise HTTPException(status_code=404, detail=f"Phrases file not found: {phrases_file}")
 
     async def _build() -> None:
         _corpus_status[agent] = "building"
@@ -426,43 +589,28 @@ async def build_corpus(
             os.makedirs(config.corpus_dir, exist_ok=True)
 
             with open(phrases_file) as f:
-                phrases = [
-                    line.strip()
-                    for line in f
-                    if line.strip() and not line.startswith("#")
-                ]
+                phrases = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
             ref_audio = None
             if speaker_ref and os.path.exists(speaker_ref):
                 ref_audio, _ = await asyncio.to_thread(load_audio, speaker_ref, config.sr)
 
             corpus = Corpus(config.corpus_dir, engine, config.voice_id)
-            await asyncio.to_thread(
-                corpus.build_from_phrases, phrases, ref_audio, config.sr
-            )
+            await asyncio.to_thread(corpus.build_from_phrases, phrases, ref_audio, config.sr)
             _corpus_status[agent] = f"ready ({len(phrases)} phrases)"
         except Exception as e:
             _corpus_status[agent] = f"error: {e}"
 
     asyncio.create_task(_build())
-    return {"agent": agent, "status": "build_started",
-            "phrases_file": phrases_file, "model": model}
+    return {"agent": agent, "status": "build_started", "phrases_file": phrases_file, "model": model}
 
 
-@app.get(
-    "/v1/corpus/{agent}/status",
-    summary="Get corpus build status for an agent",
-    tags=["Corpus"],
-)
+@app.get("/v1/corpus/{agent}/status", tags=["Corpus"])
 async def corpus_status(agent: str, _: Auth) -> dict:
     return {"agent": agent, "status": _corpus_status.get(agent, "not_built")}
 
 
-@app.get(
-    "/v1/corpus/{agent}/recommendations",
-    summary="Suggest phrases to add to corpus based on recent TTS usage",
-    tags=["Corpus"],
-)
+@app.get("/v1/corpus/{agent}/recommendations", tags=["Corpus"])
 async def corpus_recommendations(agent: str, _: Auth) -> dict:
     if agent not in AGENTS:
         raise HTTPException(status_code=400, detail=f"Unknown agent: {agent!r}")
@@ -478,10 +626,8 @@ async def corpus_recommendations(agent: str, _: Auth) -> dict:
 
     recs = []
     for phrase, freq in phrase_log.most_common(60):
-        # Skip phrases already in corpus (threshold 0.90 — tight, near-exact only)
         if corpus.lookup(phrase, threshold=0.90):
             continue
-        # Find closest existing corpus phrase for context
         best_ratio, best_match = 0.0, ""
         import difflib
         for key in corpus._index:
@@ -498,13 +644,8 @@ async def corpus_recommendations(agent: str, _: Auth) -> dict:
         })
 
     recs.sort(key=lambda x: -x["impact_score"])
-
-    return {
-        "agent": agent,
-        "total_tts_phrases_seen": sum(phrase_log.values()),
-        "unique_tts_phrases": len(phrase_log),
-        "recommendations": recs[:12],
-    }
+    return {"agent": agent, "total_tts_phrases_seen": sum(phrase_log.values()),
+            "unique_tts_phrases": len(phrase_log), "recommendations": recs[:12]}
 
 
 class AddPhrasesRequest(BaseModel):
@@ -512,14 +653,8 @@ class AddPhrasesRequest(BaseModel):
     model: str = Field(default="kokoro")
 
 
-@app.post(
-    "/v1/corpus/{agent}/add_phrases",
-    summary="Synthesise phrases and add them to the agent corpus",
-    tags=["Corpus"],
-)
-async def add_phrases_to_corpus(
-    agent: str, req: AddPhrasesRequest, _: Auth
-) -> dict:
+@app.post("/v1/corpus/{agent}/add_phrases", tags=["Corpus"])
+async def add_phrases_to_corpus(agent: str, req: AddPhrasesRequest, _: Auth) -> dict:
     if agent not in AGENTS:
         raise HTTPException(status_code=400, detail=f"Unknown agent: {agent!r}")
     if not req.phrases:
@@ -533,7 +668,6 @@ async def add_phrases_to_corpus(
         engine = get_engine(req.model)
         corpus = Corpus(config.corpus_dir, engine, config.voice_id)
         await asyncio.to_thread(corpus.build_from_phrases, req.phrases, None, config.sr)
-        # Remove freshly-added phrases from the TTS log so they don't re-appear
         phrase_log = _tts_phrase_log.get(agent, Counter())
         for p in req.phrases:
             phrase_log.pop(p, None)
@@ -544,10 +678,10 @@ async def add_phrases_to_corpus(
 
 
 # ---------------------------------------------------------------------------
-# /v1/metrics
+# /v1/metrics & /health
 # ---------------------------------------------------------------------------
 
-@app.get("/v1/metrics", summary="Recent render metrics", tags=["Metrics"])
+@app.get("/v1/metrics", tags=["Metrics"])
 async def get_metrics(_: Auth) -> dict:
     items = [asdict(m) for m in _render_metrics]
     if not items:
@@ -566,10 +700,6 @@ async def get_metrics(_: Auth) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# /health
-# ---------------------------------------------------------------------------
-
 @app.get("/health", tags=["System"])
 async def health() -> dict:
     stt = get_stt()
@@ -579,37 +709,13 @@ async def health() -> dict:
         "stt_available": stt.available,
         "active_sessions": len(get_store().list_sessions()),
         "agents": list(AGENTS.keys()),
+        "users": len(users_mod.list_users()),
+        "available_numbers": len(users_mod.list_available_numbers()),
     }
 
 
 # ---------------------------------------------------------------------------
 # /v1/stream — WebSocket real-time conversation
-# ---------------------------------------------------------------------------
-#
-# Protocol (OpenAI Realtime API-inspired):
-#
-# Client → Server:
-#   {"type": "config", "agent": "insurance", "model": "mock"}
-#   {"type": "input_audio_buffer.append", "audio": "<base64 PCM int16 16kHz>"}
-#   {"type": "input_audio_buffer.commit"}          # end of user speech
-#   {"type": "input_text", "text": "..."}          # text-only input
-#   {"type": "ping"}
-#
-# Server → Client:
-#   {"type": "session.created", "session_id": "...", "agent": "...", "persona": "..."}
-#   {"type": "input_audio_buffer.speech_started"}
-#   {"type": "input_audio_buffer.speech_stopped"}
-#   {"type": "conversation.item.input_audio_transcription.completed", "transcript": "..."}
-#   {"type": "response.creating"}
-#   {"type": "response.text.delta", "text": "..."}    # streaming text
-#   {"type": "response.audio.delta",                  # one per segment
-#       "data": "<base64 PCM int16 22050Hz>",
-#       "segment_idx": 0,
-#       "mode": "prerecorded|cached|tts",
-#       "text": "..."}
-#   {"type": "response.done", "metrics": {...}}
-#   {"type": "error", "code": "...", "message": "..."}
-#   {"type": "pong"}
 # ---------------------------------------------------------------------------
 
 async def _stream_avrs_response(
@@ -620,7 +726,6 @@ async def _stream_avrs_response(
     router: "RenderRouter",
     agent_type: str = "insurance",
 ) -> "list":
-    """Render text+slots through AVRS and stream each sentence as audio.delta immediately."""
     import avrs.parser as _parser
 
     segs = _parser.parse_utterance(text_template)
@@ -638,11 +743,9 @@ async def _stream_avrs_response(
         seg = await asyncio.to_thread(router._render_unit, sentence, ref_audio)
         rendered.append(seg)
 
-        # Log TTS sentences as corpus candidates (skip dynamic/short phrases)
         if seg.mode == "tts":
             phrase = sentence.strip()
-            if (15 <= len(phrase) <= 160
-                    and not _DYNAMIC_RE.search(phrase)):
+            if (15 <= len(phrase) <= 160 and not _DYNAMIC_RE.search(phrase)):
                 log_entry = _tts_phrase_log.setdefault(agent_type, Counter())
                 log_entry[phrase] += 1
 
@@ -672,11 +775,6 @@ async def _send_metrics(
     _render_metrics.append(m)
 
     t = timing or {}
-    stt_ms  = round(t.get("stt_ms",  0), 1)
-    llm_ms  = round(t.get("llm_ms",  0), 1)
-    tts_ms  = round(t.get("tts_ms",  m.latency_total_ms), 1)
-    ttfb_ms = round(t.get("ttfb_ms", m.latency_total_ms), 1)
-
     await ws.send_json({
         "type": "response.done",
         "metrics": {
@@ -690,18 +788,16 @@ async def _send_metrics(
             "tts_chars": m.tts_chars,
             "cost_full_tts_usd": m.cost_full_tts_usd,
             "cost_hybrid_usd": m.cost_hybrid_usd,
-            # Pipeline breakdown
-            "stt_ms":  stt_ms,
-            "llm_ms":  llm_ms,
-            "tts_ms":  tts_ms,
-            "ttfb_ms": ttfb_ms,
+            "stt_ms": round(t.get("stt_ms", 0), 1),
+            "llm_ms": round(t.get("llm_ms", 0), 1),
+            "tts_ms": round(t.get("tts_ms", m.latency_total_ms), 1),
+            "ttfb_ms": round(t.get("ttfb_ms", m.latency_total_ms), 1),
         },
     })
 
 
 @app.on_event("startup")
 async def _preload_greeting_corpus() -> None:
-    """Synthesize greeting phrases into each agent's corpus on startup."""
     model = os.getenv("AVRS_TTS_MODEL", "mock")
     if model == "mock":
         return
@@ -756,7 +852,6 @@ async def stream(ws: WebSocket, agent: str = "insurance",
         "company": persona["company"],
     })
 
-    # --- Opening greeting: agent speaks first, before any user input ---
     if persona.get("greeting"):
         from avrs.agent import _MOCK_DB
         customer_name = _MOCK_DB["customers"]["default"]["name"]
@@ -791,8 +886,7 @@ async def stream(ws: WebSocket, agent: str = "insurance",
             elif msg_type == "config":
                 agent = msg.get("agent", agent)
                 model = msg.get("model", model)
-                await ws.send_json({"type": "config.accepted", "agent": agent,
-                                    "model": model})
+                await ws.send_json({"type": "config.accepted", "agent": agent, "model": model})
 
             elif msg_type == "input_audio_buffer.append":
                 if not is_speaking:
@@ -815,9 +909,7 @@ async def stream(ws: WebSocket, agent: str = "insurance",
                     audio_buffer.clear()
                     stt = get_stt()
                     t0 = time.perf_counter()
-                    user_text = await asyncio.to_thread(
-                        stt.transcribe_bytes, pcm_bytes, 16000
-                    )
+                    user_text = await asyncio.to_thread(stt.transcribe_bytes, pcm_bytes, 16000)
                     stt_ms = (time.perf_counter() - t0) * 1000
                     log.info("[ws] stt=%.0fms → %r", stt_ms, user_text)
                 else:
@@ -830,14 +922,13 @@ async def stream(ws: WebSocket, agent: str = "insurance",
                     "type": "conversation.item.input_audio_transcription.completed",
                     "transcript": user_text,
                 })
-
                 await ws.send_json({"type": "response.creating"})
 
                 try:
                     bfsi_agent = BFSIAgent(session.agent_type)
                     t0 = time.perf_counter()
                     text_template, slots = await asyncio.to_thread(
-                        bfsi_agent.respond, session, user_text
+                        bfsi_agent.respond, session, user_text,
                     )
                     llm_ms = (time.perf_counter() - t0) * 1000
                     log.info("[ws] llm=%.0fms", llm_ms)
@@ -857,18 +948,13 @@ async def stream(ws: WebSocket, agent: str = "insurance",
                 )
                 tts_ms = (time.perf_counter() - t0) * 1000
 
-                # TTFB: commit → first audio byte (stt + llm + first segment render)
                 first_seg_ms = rendered[0].latency_ms if rendered else 0.0
                 ttfb_ms = stt_ms + llm_ms + first_seg_ms
                 log.info("[ws] tts=%.0fms ttfb=%.0fms", tts_ms, ttfb_ms)
 
-                timing = {
-                    "stt_ms":  stt_ms,
-                    "llm_ms":  llm_ms,
-                    "tts_ms":  tts_ms,
-                    "ttfb_ms": ttfb_ms,
-                }
-                await _send_metrics(ws, text_template, rendered, config, timing)
+                await _send_metrics(ws, text_template, rendered, config, {
+                    "stt_ms": stt_ms, "llm_ms": llm_ms, "tts_ms": tts_ms, "ttfb_ms": ttfb_ms,
+                })
 
             else:
                 await ws.send_json({"type": "error", "code": "unknown_message_type",
@@ -878,7 +964,388 @@ async def stream(ws: WebSocket, agent: str = "insurance",
         pass
     except Exception as e:
         try:
-            await ws.send_json({"type": "error", "code": "internal_error",
-                                "message": str(e)})
+            await ws.send_json({"type": "error", "code": "internal_error", "message": str(e)})
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# /ws/exotel — Exotel Voicebot Applet
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws/exotel")
+async def ws_exotel(ws: WebSocket, api_key: str | None = None) -> None:
+    if _API_KEY and api_key != _API_KEY:
+        await ws.close(code=4001, reason="Unauthorized")
+        return
+
+    await ws.accept()
+    log.info("[exotel] WebSocket connected")
+
+    call_sid = None
+    session: exotel_mod.ExotelSession | None = None
+
+    try:
+        while True:
+            message = await ws.receive()
+            if message["type"] == "websocket.disconnect":
+                break
+            if not message.get("text"):
+                continue
+
+            msg = json.loads(message["text"])
+            event = msg.get("event", "")
+
+            if event == "start":
+                start = msg.get("start", {})
+                call_sid = start.get("callSid", f"call_{uuid.uuid4().hex[:8]}")
+                caller = start.get("from", "unknown")
+                callee = start.get("to", "unknown")
+                log.info("[exotel] call started: %s from %s to %s", call_sid, caller, callee)
+
+                user = users_mod.get_user_by_exotel(callee)
+                if not user:
+                    log.warning("[exotel] no user found for callee %s — rejecting call", callee)
+                    await ws.close(code=4004, reason="Unknown subscriber")
+                    return
+
+                if not user.enabled:
+                    log.warning("[exotel] user %s disabled — rejecting call", user.user_id)
+                    await ws.close(code=4004, reason="Subscriber disabled")
+                    return
+
+                if users_mod.is_blocked(user.user_id, caller):
+                    log.info("[exotel] caller %s is blocked for user %s", caller, user.user_id)
+                    await ws.send_json({"event": "media", "media": {"payload": ""}})
+                    await ws.close(code=1000, reason="blocked")
+                    return
+
+                session = exotel_mod.ExotelSession(
+                    call_sid=call_sid,
+                    caller=caller,
+                    callee=callee,
+                    exotel_ws=ws,
+                    user=user,
+                )
+                exotel_mod.register_session(session)
+
+                await exotel_mod._broadcast_to_user(user.user_id, {
+                    "type": "call.started",
+                    "caller": caller,
+                    "callee": callee,
+                    "call_sid": call_sid,
+                })
+
+                asyncio.create_task(session.run())
+                break
+
+            elif event == "media":
+                pass
+
+    except WebSocketDisconnect:
+        log.info("[exotel] disconnected before start")
+    except Exception as e:
+        log.exception("[exotel] pre-start error: %s", e)
+    finally:
+        if session and call_sid:
+            exotel_mod.remove_session(call_sid)
+        try:
+            await ws.close()
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# /ws/plivo — Plivo AudioStream
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws/plivo")
+async def ws_plivo(ws: WebSocket, api_key: str | None = None) -> None:
+    """Plivo AudioStream — bidirectional audio over WebSocket.
+
+    Plivo connects here when a caller dials a Plivo number.
+    Audio flows: Plivo → decode → STT → LLM → TTS → encode → Plivo.
+    """
+    if _API_KEY and api_key != _API_KEY:
+        await ws.close(code=4001, reason="Unauthorized")
+        return
+
+    await ws.accept()
+    log.info("[plivo] WebSocket connected")
+
+    call_id = None
+    session: plivo_mod.PlivoSession | None = None
+
+    try:
+        while True:
+            message = await ws.receive()
+            if message["type"] == "websocket.disconnect":
+                break
+            if not message.get("text"):
+                continue
+
+            msg = json.loads(message["text"])
+            event = msg.get("event", "")
+
+            if event == "start":
+                start = msg.get("start", {})
+                call_id = start.get("callId", f"plv_{uuid.uuid4().hex[:8]}")
+                stream_id = start.get("streamId", call_id)
+                caller = start.get("from", "unknown")
+                callee = start.get("to", "unknown")
+                media_fmt = start.get("mediaFormat", {})
+                encoding = media_fmt.get("encoding", "PCMU")
+                log.info("[plivo] call started: %s from %s to %s (encoding=%s)", call_id, caller, callee, encoding)
+
+                user = users_mod.get_user_by_exotel(callee)
+                if not user:
+                    log.warning("[plivo] no user found for callee %s — rejecting call", callee)
+                    await ws.close(code=4004, reason="Unknown subscriber")
+                    return
+
+                if not user.enabled:
+                    log.warning("[plivo] user %s disabled — rejecting call", user.user_id)
+                    await ws.close(code=4004, reason="Subscriber disabled")
+                    return
+
+                if users_mod.is_blocked(user.user_id, caller):
+                    log.info("[plivo] caller %s is blocked for user %s", caller, user.user_id)
+                    await ws.close(code=1000, reason="blocked")
+                    return
+
+                session = plivo_mod.PlivoSession(
+                    call_id=call_id,
+                    stream_id=stream_id,
+                    caller=caller,
+                    callee=callee,
+                    plivo_ws=ws,
+                    user=user,
+                    encoding=encoding,
+                )
+                plivo_mod.register_plivo_session(session)
+
+                await exotel_mod._broadcast_to_user(user.user_id, {
+                    "type": "call.started",
+                    "caller": caller,
+                    "callee": callee,
+                    "call_sid": call_id,
+                })
+
+                asyncio.create_task(session.run())
+                break
+
+            elif event == "media":
+                pass
+
+    except WebSocketDisconnect:
+        log.info("[plivo] disconnected before start")
+    except Exception as e:
+        log.exception("[plivo] pre-start error: %s", e)
+    finally:
+        if session and call_id:
+            plivo_mod.remove_plivo_session(call_id)
+        try:
+            await ws.close()
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# /v1/plivo/answer — Plivo XML answer URL
+# ---------------------------------------------------------------------------
+
+from fastapi.responses import PlainTextResponse
+
+
+@app.post("/v1/plivo/answer", response_class=PlainTextResponse, tags=["Plivo"])
+@app.get("/v1/plivo/answer", response_class=PlainTextResponse, tags=["Plivo"])
+async def plivo_answer(
+    From: str | None = None,          # noqa: N803
+    To: str | None = None,            # noqa: N803
+    CallUUID: str | None = None,      # noqa: N803
+) -> str:
+    """Return Plivo XML to start a bidirectional AudioStream.
+
+    Configure this as the Answer URL in your Plivo dashboard:
+      POST https://your-domain.com/v1/plivo/answer
+    """
+    # Build the WebSocket URL with API key for auth
+    ws_url = f"wss://pickr.phronetic.ai/ws/plivo?api_key={_API_KEY}"
+
+    # Plivo XML with bidirectional stream
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Stream streamUrl="{ws_url}"
+          bidirectional="true"
+          audioTrack="both"
+          statusCallback="https://pickr.phronetic.ai/v1/plivo/status" />
+</Response>"""
+    return xml
+
+
+@app.post("/v1/plivo/status", tags=["Plivo"])
+@app.get("/v1/plivo/status", tags=["Plivo"])
+async def plivo_status(
+    CallUUID: str | None = None,      # noqa: N803
+    CallStatus: str | None = None,    # noqa: N803
+    From: str | None = None,          # noqa: N803
+    To: str | None = None,            # noqa: N803
+) -> dict:
+    """Receive Plivo stream status callbacks (started, stopped, etc.)."""
+    log.info("[plivo] status callback: call=%s status=%s from=%s to=%s",
+             CallUUID, CallStatus, From, To)
+    return {"status": "received"}
+
+
+# ---------------------------------------------------------------------------
+# /ws/screen — Android app monitor / control channel
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws/screen")
+async def ws_screen(ws: WebSocket, token: str | None = None, api_key: str | None = None) -> None:
+    user: users_mod.User | None = None
+    if _API_KEY and api_key == _API_KEY:
+        pass
+    elif token:
+        user = users_mod.get_user_by_token(token)
+        if not user:
+            await ws.close(code=4001, reason="Invalid token")
+            return
+    else:
+        await ws.close(code=4001, reason="Unauthorized")
+        return
+
+    await ws.accept()
+
+    user_id = user.user_id if user else "admin"
+    exotel_mod.register_app_screen(user_id, ws)
+    log.info("[screen] app connected user=%s", user_id)
+
+    await ws.send_json({"type": "ready", "agent": user.persona if user else "screener"})
+
+    try:
+        while True:
+            message = await ws.receive()
+            if message["type"] == "websocket.disconnect":
+                break
+            if not message.get("text"):
+                continue
+
+            try:
+                msg = json.loads(message["text"])
+            except json.JSONDecodeError:
+                continue
+
+            msg_type = msg.get("type", "")
+
+            if msg_type == "action":
+                action = msg.get("action")
+                call_sid = msg.get("call_sid", "")
+                text = msg.get("text")
+                ok = await exotel_mod.route_app_action(user_id, call_sid, action, text)
+                if not ok:
+                    ok = await plivo_mod.route_plivo_app_action(user_id, call_sid, action, text)
+                await ws.send_json({"type": "action.ack", "action": action, "call_sid": call_sid, "ok": ok})
+
+            elif msg_type == "ping":
+                await ws.send_json({"type": "pong"})
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        log.error("[screen] error: %s", e)
+    finally:
+        exotel_mod.unregister_app_screen(user_id, ws)
+        log.info("[screen] app disconnected user=%s", user_id)
+
+
+# ---------------------------------------------------------------------------
+# Admin endpoints (protected by X-API-Key)
+# ---------------------------------------------------------------------------
+
+class AddNumbersRequest(BaseModel):
+    numbers: list[str] = Field(..., description="Virtual numbers to add to pool")
+    region: str = Field(default="IN")
+
+
+@app.post("/v1/admin/numbers", tags=["Admin"], dependencies=[Depends(_verify_api_key)])
+async def admin_add_numbers(req: AddNumbersRequest) -> dict:
+    for num in req.numbers:
+        users_mod.add_number_to_pool(num, req.region)
+    return {"added": len(req.numbers), "region": req.region}
+
+
+@app.delete("/v1/admin/numbers/{number}", tags=["Admin"], dependencies=[Depends(_verify_api_key)])
+async def admin_remove_number(number: str) -> dict:
+    users_mod.remove_number_from_pool(number)
+    return {"removed": number}
+
+
+@app.get("/v1/admin/numbers", tags=["Admin"], dependencies=[Depends(_verify_api_key)])
+async def admin_list_numbers() -> dict:
+    pool = users_mod.list_pool()
+    available = [n for n, m in pool.items() if m.get("status") == "available"]
+    assigned = [n for n, m in pool.items() if m.get("status") == "assigned"]
+    return {"total": len(pool), "available": available, "assigned": assigned, "pool": pool}
+
+
+@app.post("/v1/admin/users/{user_id}/tier", tags=["Admin"], dependencies=[Depends(_verify_api_key)])
+async def admin_set_tier(user_id: str, tier: str = Query(...)) -> dict:
+    try:
+        user = users_mod.set_user_tier(user_id, tier)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"user_id": user_id, "tier": tier, "monthly_minutes_limit": user.monthly_minutes_limit}
+
+
+@app.post("/v1/admin/users/{user_id}/enable", tags=["Admin"], dependencies=[Depends(_verify_api_key)])
+async def admin_enable_user(user_id: str) -> dict:
+    user = users_mod.update_user(user_id, enabled=True)
+    return {"user_id": user_id, "enabled": user.enabled}
+
+
+@app.post("/v1/admin/users/{user_id}/disable", tags=["Admin"], dependencies=[Depends(_verify_api_key)])
+async def admin_disable_user(user_id: str) -> dict:
+    user = users_mod.update_user(user_id, enabled=False)
+    return {"user_id": user_id, "enabled": user.enabled}
+
+
+@app.get("/v1/admin/users", tags=["Admin"], dependencies=[Depends(_verify_api_key)])
+async def admin_list_users() -> list[dict]:
+    return [u.to_dict() for u in users_mod.list_users()]
+
+
+@app.get("/v1/admin/users/{user_id}", tags=["Admin"], dependencies=[Depends(_verify_api_key)])
+async def admin_get_user(user_id: str) -> dict:
+    user = users_mod.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user.to_dict()
+
+
+@app.delete("/v1/admin/users/{user_id}", tags=["Admin"], dependencies=[Depends(_verify_api_key)])
+async def admin_delete_user(user_id: str) -> dict:
+    ok = users_mod.delete_user(user_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"user_id": user_id, "deleted": True}
+
+
+@app.get("/v1/admin/analytics", tags=["Admin"], dependencies=[Depends(_verify_api_key)])
+async def admin_analytics() -> dict:
+    users = users_mod.list_users()
+    total_users = len(users)
+    total_calls = sum(len(u.call_history) for u in users)
+    total_minutes = sum(u.monthly_minutes_used for u in users)
+    tier_counts = {}
+    for u in users:
+        tier_counts[u.pricing_tier] = tier_counts.get(u.pricing_tier, 0) + 1
+
+    return {
+        "total_users": total_users,
+        "total_calls": total_calls,
+        "total_minutes_used": round(total_minutes, 1),
+        "tier_distribution": tier_counts,
+        "available_numbers": len(users_mod.list_available_numbers()),
+        "active_sessions": len(get_store().list_sessions()),
+    }
