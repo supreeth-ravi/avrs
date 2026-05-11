@@ -1,8 +1,8 @@
 # AVRS / Pickr — Current Status
 
-**Snapshot:** 2026-05-10
-**Branch:** `main` (up to date with `origin/main`)
-**Last commit:** `a676f4b fix: Docker build and missing dependencies`
+**Snapshot:** 2026-05-11
+**Branch:** `feat/pickr` (up to date with `origin/feat/pickr`)
+**Last commit:** `c1ef5d1 docs(brand): lead README with Pickr, add in-app logo`
 
 This file is a working snapshot of where the codebase stands today, what is committed vs in-flight, and what is wired up end-to-end. It is not historical documentation — overwrite or update it as the project evolves.
 
@@ -12,15 +12,14 @@ This file is a working snapshot of where the codebase stands today, what is comm
 
 The repo has evolved from the original **AVRS** research prototype (hybrid TTS routing, MIT/Phronetic paper) into a **multi-tenant voice screening product called Pickr** built on top of AVRS.
 
-- **AVRS core (committed):** parser → corpus → router → merger → metrics pipeline + Kokoro/mock TTS + Deepgram/Whisper STT + FastAPI WebSocket voice agent. Ships with three BFSI personas (insurance / banking / payments).
-- **Pickr layer (uncommitted, working tree only):** OTP/auth, multi-tenant user store with pricing tiers, virtual number pool, Exotel + Plivo telephony bridges, a `screener` persona for AI call screening, and an Android client (`ai.phronetic.screener`).
-- 11 unstaged/untracked changes; nothing has been committed yet for the Pickr direction.
+- **AVRS core (on `main`):** parser → corpus → router → merger → metrics pipeline + Kokoro/mock TTS + Deepgram/Whisper STT + FastAPI WebSocket voice agent. Ships with three BFSI personas (insurance / banking / payments).
+- **Pickr layer (committed on `feat/pickr`):** OTP/auth, multi-tenant user store with pricing tiers, virtual number pool, Exotel + Plivo telephony bridges, a `screener` persona for AI call screening, and an Android client (`ai.phronetic.screener`) with in-app branding.
+- All Pickr work is now committed and pushed to `origin/feat/pickr`. Branch has not yet been merged to `main` — nothing reviewed via PR.
+- README on this branch is now Pickr-led; AVRS is documented as the underlying engine.
 
 ---
 
-## What Is Committed (AVRS Research Prototype)
-
-Recent commit history on `main`:
+## What Is Committed on `main` (AVRS Research Prototype)
 
 ```
 a676f4b fix: Docker build and missing dependencies
@@ -33,7 +32,7 @@ a676f4b fix: Docker build and missing dependencies
 644994e feat: core AVRS audio pipeline
 ```
 
-Capabilities in the committed baseline:
+Capabilities in the `main` baseline:
 - Three-tier render routing (corpus → cache → live TTS) at segment granularity.
 - Kokoro ONNX (CPU, no GPU) TTS + mock TTS for dev.
 - Deepgram nova-2 cloud STT with offline `faster-whisper` fallback.
@@ -45,23 +44,43 @@ Capabilities in the committed baseline:
 
 ---
 
-## What Is In Flight (Pickr — Uncommitted)
+## What Is Committed on `feat/pickr` (the Pickr layer)
 
-`git status` highlights:
+Commits on `feat/pickr` ahead of `main` (oldest → newest):
 
-| Path | State | Purpose |
-|---|---|---|
-| `avrs/voice_api.py` | modified (+693 / −153) | Massive expansion: OTP auth, user/admin endpoints, Plivo answer XML, `/ws/screen`, `/ws/exotel`, `/ws/plivo`. |
-| `agents.yaml` | modified (+73) | New `screener` persona for AI call screening with INTENT/ACTION protocol. |
-| `avrs/users.py` | untracked (555 lines) | Multi-tenant user store — OTP, pricing tiers (free/starter/pro/enterprise), virtual number pool, JSON persistence. |
-| `avrs/exotel.py` | untracked (396 lines) | Exotel Voicebot WebSocket bridge (8 kHz PCM ↔ STT/LLM/TTS) with screen-event broadcasting. |
-| `avrs/plivo.py` | untracked (322 lines) | Plivo AudioStream WebSocket bridge (μ-law / L16) — same pipeline. |
-| `avrs/audio_utils.py` | untracked (187 lines) | Resample, energy VAD, PCM↔float32, μ-law codec helpers shared by Exotel/Plivo. |
-| `android/` | untracked | Kotlin/Compose Android app `ai.phronetic.screener` — service, overlay, view-models, repositories, Room DB. |
-| `corpus/screener/` | untracked | 12 prerecorded WAVs + `index.json` for the screener persona. |
-| `brand/` | untracked | `icon.svg`, `logo.svg`. |
-| `docs/END_TO_END_SETUP.md` | untracked | Pickr backend + Exotel + Android wiring guide. |
-| `docs/PLIVO_SETUP.md` | untracked | Pickr + Plivo step-by-step setup. |
+```
+a5baddc chore: gitignore Pickr runtime state, screener corpus exception, Android build artifacts
+88623d6 feat(auth): multi-tenant user store with OTP, pricing tiers, and virtual number pool
+dce5d78 feat(telephony): Exotel and Plivo WebSocket bridges with shared audio utils
+2fed348 feat(agent): screener persona for Pickr AI call screening
+5ecae8c feat(api): wire Pickr auth, telephony, and admin endpoints into voice_api
+20e21b7 feat(android): Pickr Android client (Compose + Room)
+747524a chore(brand): add Pickr logo and icon SVGs
+5178b94 docs: Pickr end-to-end and Plivo setup guides
+05ba9cc docs: STATUS.md snapshot of AVRS core + Pickr in-flight work
+c1ef5d1 docs(brand): lead README with Pickr, add in-app logo
+```
+
+What each commit added:
+
+| Path | Purpose |
+|---|---|
+| `avrs/voice_api.py` | Expanded with OTP auth, user/admin endpoints, Plivo answer XML, `/ws/screen`, `/ws/exotel`, `/ws/plivo`. |
+| `agents.yaml` | New `screener` persona for AI call screening with INTENT/ACTION protocol. |
+| `avrs/users.py` | Multi-tenant user store — OTP, pricing tiers (free/starter/pro/enterprise), virtual number pool, JSON persistence. |
+| `avrs/exotel.py` | Exotel Voicebot WebSocket bridge (8 kHz PCM ↔ STT/LLM/TTS) with screen-event broadcasting. |
+| `avrs/plivo.py` | Plivo AudioStream WebSocket bridge (μ-law / L16) — same pipeline. |
+| `avrs/audio_utils.py` | Resample, energy VAD, PCM↔float32, μ-law codec helpers shared by Exotel/Plivo. |
+| `android/` | Kotlin/Compose Android app `ai.phronetic.screener` — service, overlay, view-models, repositories, Room DB. |
+| `android/.../res/drawable/pickr_logo.xml` | In-app vector drawable mirroring `brand/icon.svg`; wired into `AppHeader`. |
+| `corpus/screener/` | 12 prerecorded WAVs + `index.json` for the screener persona. |
+| `brand/` | `icon.svg`, `logo.svg` (wordmark now reads "Pickr"). |
+| `docs/END_TO_END_SETUP.md` | Pickr backend + Exotel + Android wiring guide. |
+| `docs/PLIVO_SETUP.md` | Pickr + Plivo step-by-step setup. |
+| `README.md` | Rewritten Pickr-first with centered title + brand visuals; AVRS positioned as underlying engine. |
+| `STATUS.md` | This file. |
+
+Working tree is currently **clean** — everything pushed to `origin/feat/pickr`. No PR opened to `main` yet.
 
 ### Pickr Architecture (per `docs/END_TO_END_SETUP.md`)
 
@@ -132,20 +151,21 @@ Coverage is limited to the AVRS core. **Nothing in the Pickr layer (`users.py`, 
 
 ## Risks / Open Items
 
-1. **Large uncommitted surface.** `voice_api.py` has grown 693 lines beyond what is on `main`; `users.py`, `exotel.py`, `plivo.py`, `audio_utils.py` are wholly untracked. None of it has been reviewed via PR.
+1. **No PR to `main` yet.** Pickr lives entirely on `feat/pickr`. Branch is committed and pushed but unreviewed.
 2. **No tests for the Pickr layer.** OTP, tier limits, number-pool assignment, Exotel/Plivo bridges, μ-law codec — all untested. Common rule says ≥80% coverage.
 3. **JSON-file persistence.** `users.json`, `otp_cache.json`, `number_pool.json` are MVP-grade; production needs Postgres + Redis (called out in code comments).
 4. **Secrets in `.env` only.** `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`, `PLIVO_AUTH_ID/TOKEN`, `AVRS_API_KEY` — need a secret-manager story before any deploy.
 5. **`AVRS_API_KEY` defaults to empty.** When unset, admin endpoints are open. Should fail-closed in production builds.
-6. **Two telephony providers wired in parallel.** Exotel and Plivo both bridge the same pipeline; no doc on which is canonical. `docs/PLIVO_SETUP.md` says "recommended for Indian numbers".
-7. **README is still AVRS-branded.** No mention of Pickr, OTP, multi-tenant, or the Android app.
+6. **Two telephony providers wired in parallel.** Exotel and Plivo both bridge the same pipeline. `docs/PLIVO_SETUP.md` flags Plivo as "recommended for Indian numbers" but no decision committed in code.
+7. **Android `Config.SERVER_URL` is hardcoded.** Currently points at `https://pickr.phronetic.ai`; needs build-flavour or BuildConfig wiring before release builds.
 
 ---
 
 ## Suggested Next Moves
 
-- Carve the Pickr work into reviewable commits (auth/users → telephony bridges → screener persona → Android), each with tests.
+- Open a PR from `feat/pickr` → `main` for review (or carve into smaller PRs per layer if reviewers prefer that scope).
 - Add pytest coverage for `users.py` (OTP expiry, tier enforcement, pool assignment) and a fake-WS test for `exotel.py` / `plivo.py`.
 - Decide Exotel vs Plivo as the primary path, keep the other behind a flag.
 - Migrate persistence to Postgres + Redis before onboarding real users.
-- Update top-level `README.md` (or add `README_PICKR.md`) so the Pickr direction is discoverable.
+- Move Android `SERVER_URL` to `BuildConfig` with debug/release flavours.
+- Stand up an `AVRS_API_KEY` fail-closed check for non-dev environments.
