@@ -16,12 +16,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.phronetic.screener.R
 import ai.phronetic.screener.ScreeningMode
 import kotlinx.coroutines.delay
 
@@ -82,17 +85,14 @@ fun AppHeader(mode: ScreeningMode, active: Boolean) {
                         .blur(20.dp)
                 )
             }
-            Box(
+            Image(
+                painter = painterResource(R.drawable.pickr_logo),
+                contentDescription = "Pickr",
                 modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(listOf(VioletLight, Violet))
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("✦", fontSize = 26.sp, color = Color.White)
-            }
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(18.dp)),
+                contentScale = ContentScale.Fit,
+            )
         }
 
         Spacer(Modifier.height(20.dp))

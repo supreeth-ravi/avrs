@@ -1,206 +1,133 @@
-# AVRS - Adaptive Voice Rendering System
+<div align="center">
 
-> Real-time hybrid audio rendering that makes voice AI agents fast, cheap, and seamless.
+<img src="brand/icon.svg" alt="Pickr logo" width="140" />
 
-**Author:** Supreeth Ravi &nbsp;|&nbsp; **Version:** 0.1.0
+# Pickr
 
----
+### AI Call Screener
 
-## What is AVRS?
+> An AI receptionist for your phone. It picks up unknown callers, screens them in real time, and lets you decide whether to take the call - all from a native Android app.
 
-AVRS is a new way of thinking about how voice AI agents speak.
+**Author:** Supreeth Ravi &nbsp;|&nbsp; **Branch:** `feat/pickr` &nbsp;|&nbsp; **Engine:** AVRS
 
-Right now, when a voice agent says something like:
+<img src="brand/logo.svg" alt="Pickr wordmark" width="420" />
 
-> *"Your claim CN-20241130-442 is currently under review, and you can expect a resolution by December 20th."*
-
-Every single word in that sentence is synthesised from scratch using a Text-to-Speech API. Real time. Every turn. Every caller. That costs money per character and takes 1-3 seconds.
-
-AVRS asks a different question: **why synthesise the same phrases thousands of times a day?**
-
-Phrases like *"Your claim is under review"* or *"How may I assist you today?"* are spoken on every call. Only a tiny fraction of each response is truly unique - the claim number, the date, the amount. AVRS prerecords the static parts once, synthesises only the dynamic values, and stitches everything together into seamless audio.
-
-Same voice. Same quality. A fraction of the cost. Dramatically lower latency.
+</div>
 
 ---
 
-## The Problem with Standard Voice AI
+## What is Pickr?
 
-The typical voice AI pipeline looks like this:
+Spam calls, delivery agents, work calls, scams, that one relative who only calls during meetings - your phone has no idea which is which, so it rings for all of them.
+
+Pickr puts an AI receptionist between the caller and you. When someone calls your Pickr number, the AI picks up, asks who's calling and why, transcribes the conversation live to your phone, and shows you a one-tap decision: **Join**, **Block**, or **Send a message** the AI will read out loud.
+
+You see the call before it interrupts you. The caller talks to a calm, natural-sounding voice that responds in under a second. Nothing is recorded without you seeing it; everything is on your terms.
+
+---
+
+## How it works
 
 ```
-User speaks -> STT -> LLM generates full response -> TTS synthesises everything -> Agent speaks
+   Someone calls your Pickr number
+                │
+                ▼
+        ┌──────────────┐
+        │ Exotel/Plivo │   PSTN / SIP carrier
+        └──────┬───────┘
+               │  WebSocket (audio in/out)
+               ▼
+   ┌───────────────────────┐    /ws/screen     ┌──────────────────┐
+   │   Pickr Backend       │ ◄───────────────► │  Pickr Android   │
+   │  (FastAPI + AVRS)     │   live transcript │      App         │
+   │  STT → LLM → TTS      │   intent + action │   (Compose)      │
+   └───────────────────────┘                    └──────────────────┘
 ```
 
-It works. But at scale, three costs compound hard.
-
-### 1. TTS is expensive per character
-
-Commercial TTS APIs charge around $0.30 per 1,000 characters. A contact center running 100,000 calls per day at 6 turns per call generates roughly 36 million TTS characters daily. That is around $10,800 per day, or $3.9M per year, in TTS alone - before LLM inference costs.
-
-### 2. LLM generates everything from scratch every turn
-
-The model writes a fresh 150-200 token response for every single turn. At scale, that is the dominant inference cost. Most of what it generates is boilerplate that was already said on the last thousand calls.
-
-### 3. Latency stacks up
-
-STT + LLM generation + TTS synthesis = 2 to 5 seconds before the caller hears anything. Human conversation has gaps under 200ms. At 3 seconds, an AI voice agent sounds slow and unnatural regardless of how good the content is.
+1. Caller dials your assigned virtual number (Exotel or Plivo).
+2. The carrier streams the call audio over WebSocket to the Pickr backend.
+3. The backend runs **STT → Claude (screener persona) → TTS** through the AVRS three-tier renderer (corpus → cache → live TTS) so responses come back in tens to hundreds of milliseconds.
+4. Every transcript chunk, intent (`spam | delivery | work | personal | emergency | unknown`), and action signal is broadcast to your Android app over `/ws/screen`.
+5. You tap **Join** (AI says "please hold, connecting you"), **Block** (AI politely ends the call), or type a message the AI reads back to the caller.
 
 ---
 
-## The AVRS Approach
+## What users do
 
-AVRS introduces a paradigm called **deterministic templates with dynamic slot infilling**.
+1. **Install the Pickr Android app** (`android/` in this repo).
+2. **Grant permissions** - phone, contacts, notifications, overlay, "default call screener" role.
+3. **Verify your number** with OTP. The backend assigns you a virtual number from the pool.
+4. **Activate forwarding** - the app auto-dials the carrier code `**21*<assigned_number>#` so unknown calls forward to Pickr.
+5. **Set your AI greeting** - "Hi, this is Maya, Supreeth's assistant. Who's calling?"
+6. **Done.** From now on, unknown callers reach the AI first; your phone only rings when you choose to take the call.
 
-Instead of asking the LLM to write a full sentence, it produces a template with named placeholders plus a dictionary of values to fill them:
-
-```
-LLM output:
-  "Your claim {claim_id} is {status}. Resolution by {eta}."
-  SLOTS: {"claim_id": "CN-20241130-442", "status": "under review", "eta": "December 20"}
-```
-
-The template is split into segments. Static segments are served from a prerecorded corpus or session cache. Only the slot values ever touch live TTS.
-
-### How it fixes all three problems
-
-| Problem | Without AVRS | With AVRS |
-|---|---|---|
-| TTS cost | 100% of characters synthesised every turn | 15-85% of characters never touch TTS |
-| LLM tokens | 150-200 output tokens per turn | ~50 tokens (template + JSON slots) |
-| Latency | 2,000-5,000ms cold start | 8ms warm, ~850ms mixed |
+Detailed onboarding flow is in [`docs/END_TO_END_SETUP.md`](docs/END_TO_END_SETUP.md).
 
 ---
 
-## Full Pipeline
+## Why an AI receptionist works here
 
-![AVRS Voice Response Pipeline](docs/images/avrs_pipeline.png)
-
-The pipeline shows the complete flow from user speech to rendered audio. On the right, the RenderRouter detail shows how each segment is independently resolved through the three tiers. The bottom section shows real metrics from a two-turn conversation: Turn 1 at 1,470ms with a mix of corpus, cache, and live TTS; Turn 2 at 8ms with zero live TTS.
-
----
-
-## Three-Tier Audio Routing
-
-Every segment in a response is resolved through a priority-ordered chain. Cheapest and fastest source wins:
-
-**Tier 1 - Corpus (~2ms).** Fuzzy match against a library of prerecorded phrases. Human-recorded or pre-synthesised offline. Zero marginal cost per call.
-
-**Tier 2 - Session cache (~3ms).** Was this exact segment synthesised in a previous turn? Serve it from disk instantly. Cache is shared across all callers in a session.
-
-**Tier 3 - Live TTS (200-840ms).** Novel text. Synthesised locally with Kokoro ONNX - no API, no per-character cost, no GPU needed. Result is written to cache for instant reuse next time.
-
-After all segments render, the Merger stitches them together with pitch alignment and 50ms crossfades so the output sounds like one continuous utterance.
-
----
-
-## Server Architecture
-
-![AVRS Server Architecture](docs/images/avrs_architecture.png)
-
-The architecture shows the full server component breakdown - from WAV input through STT, the LLM agent with tool use, the parser and slot filler, the three-tier audio renderer, the merger, and finally the streaming response back to the caller. The right panel shows the tech stack for each component.
-
-| Component | Technology |
+| Problem | What Pickr does |
 |---|---|
-| API server | FastAPI + uvicorn |
-| STT | Deepgram nova-2 (cloud) / faster-whisper (offline) |
-| LLM | Claude with tool use (model configurable via env) |
-| TTS | Kokoro ONNX - 82M params, CPU only, no GPU |
-| Audio processing | librosa, soundfile, numpy/scipy |
-| Corpus lookup | In-memory fuzzy match (difflib, threshold 0.68) |
-| Cache | Local disk, SHA256-keyed WAV files |
+| Spam/robocalls waste attention | AI screens before you ever see the call |
+| You can't tell important from spam | INTENT is shown on screen as the caller speaks |
+| Voicemail is dead | Real-time transcript + one-tap join is faster |
+| TTS at scale is expensive and slow | AVRS engine routes 70-85% of audio to a prerecorded corpus and per-session cache |
+| Latency over 1s sounds robotic | AVRS warm-cache turns render in single-digit milliseconds |
+
+The AVRS engine ([details below](#engine-avrs)) is what makes the AI side of the conversation cheap and fast enough to do this for every incoming call.
 
 ---
 
-## Turn-by-Turn Example
+## Components
 
-![AVRS Turn-by-Turn Example](docs/images/avrs_example.png)
+### Backend (`avrs/`)
 
-This shows two consecutive turns from a real conversation.
+FastAPI app exposing:
 
-**Turn 1 (cold session):** User asks about their claim. Claude calls `get_claim_status()`, gets the data, and produces a 6-segment response. Three segments hit the corpus or cache (~2-3ms each). Two novel values (the claim ID and the reason) go to live TTS (~840ms and ~620ms). Total: 1,470ms. Metrics: 33% prerecorded, 16% cached, 51% live TTS.
+- **Auth (OTP)** - `/v1/auth/otp/request`, `/v1/auth/otp/verify`, `/v1/auth/me`
+- **Telephony bridges** - `/ws/exotel` (8 kHz PCM) and `/ws/plivo` (μ-law / L16)
+- **App live monitor** - `/ws/screen?token=...` streams transcript + intent + action events
+- **Plivo callbacks** - `/v1/plivo/answer`, `/v1/plivo/status`
+- **Admin (X-API-Key)** - virtual number pool CRUD, user tier/enable/disable, usage analytics
+- **Health & metrics** - `/health`, `/v1/metrics`, OpenAPI at `/docs`
 
-**Turn 2 (warm cache):** User asks when it will be resolved. Claude responds with two segments. The static phrase hits the corpus. "December 20" was synthesised in Turn 1 and is now in cache. Total: **8ms**. Metrics: 70% prerecorded, 30% cached, 0% live TTS.
+Key modules:
 
-This is the cache warmth effect - values synthesised in one turn are instantly available in the next.
+| File | Purpose |
+|---|---|
+| `avrs/voice_api.py` | All HTTP + WebSocket routes |
+| `avrs/users.py` | OTP, tiers (free/starter/pro/enterprise), virtual number pool, JSON persistence |
+| `avrs/exotel.py` | Exotel Voicebot WebSocket bridge |
+| `avrs/plivo.py` | Plivo AudioStream WebSocket bridge |
+| `avrs/audio_utils.py` | Resample, energy VAD, PCM ↔ float32, μ-law codec |
+| `avrs/agent.py` | Claude agent loop using the `screener` persona |
+| `avrs/router.py` + `corpus.py` + `tts.py` + `merger.py` | AVRS three-tier render pipeline |
 
----
+The `screener` persona is configured in [`agents.yaml`](agents.yaml). Its system prompt enforces a strict output format with `INTENT:` and `ACTION:` lines so the Android app can react deterministically.
 
-## Measured Results
+### Android app (`android/`)
 
-From a 7-turn insurance conversation benchmark:
+Native Kotlin + Jetpack Compose, package `ai.phronetic.screener`.
 
-| Turn | Prerecorded | Cached | Live TTS | Total render time |
-|---|---|---|---|---|
-| Turn 1 - cold session | 33% | 16% | 51% | 1,470ms |
-| Turn 2 - warm cache | 70% | 30% | 0% | 8ms |
-| Best single question | 75% | 0% | 25% | 7ms |
+| Layer | Files |
+|---|---|
+| Services | `ScreenerService.kt`, `ScreeningWebSocketService.kt` |
+| UI | `ui/MainActivity.kt`, `ui/ScreeningOverlayActivity.kt`, `ui/Components.kt` |
+| Screens | `ui/screens/` - Dashboard, History, Contacts, Onboarding, Profile |
+| ViewModels | `viewmodel/` - Contacts, History, Dashboard |
+| Engines | `engine/` - `ScreeningEngine`, `LlmEngine`, `OfflineEngine` |
+| Data | `data/db/` Room (`AppDatabase`, `ContactRule`, `ScreenedCallDao`), `data/repository/` |
 
-### Cost at scale (100,000 calls/day, 75% hit rate at steady state)
-
-| | Without AVRS | With AVRS | Saving |
-|---|---|---|---|
-| TTS cost/day | $10,800 | $2,700 | $8,100 |
-| TTS cost/year | $3.94M | $985K | ~$3M |
-| LLM inference/day | $360 | $90 | $270 |
-| P50 response latency | 2,000ms | 8-850ms | 10-250x faster |
-
-At 1M calls/day: around $30M/year in savings.
-
----
-
-## Why This Matters Beyond Cost
-
-**Latency is naturalness.** Human conversation has response gaps under 200ms. At 2-5 seconds, AI voice agents feel robotic regardless of content quality. At 8ms on warm turns, the gap effectively disappears.
-
-**Runs fully offline.** Kokoro ONNX runs on CPU with no GPU, no API, no internet required after setup. STT, LLM, and TTS can all run on a single server with zero external dependencies.
-
-**Regulatory alignment.** In insurance, banking, and healthcare, certain disclosure phrases must be spoken verbatim. A generative model can paraphrase - a prerecorded corpus cannot. Every AVRS response is a deterministic function of `(template_id, slot_values)`, giving you a complete audit trail.
-
-**Cache compounds automatically.** Every phrase synthesised for one caller is instantly available for the next. At production volume, hit rates stabilise at 75-85% within days - no manual work needed.
+Server URL lives in `android/app/src/main/java/ai/phronetic/screener/Config.kt` - point it at your backend before building.
 
 ---
 
-## Agent Personas
+## Setup
 
-Three voice agent personas ship out of the box. All config lives in `agents.yaml` - change names, prompts, greetings, or add new personas without touching any code.
+Two parts: the backend (with a telephony provider) and the Android app.
 
-| ID | Name | Domain |
-|---|---|---|
-| `insurance` | Priya | Health and motor insurance |
-| `banking` | Arjun | Savings accounts, loans, cards, UPI |
-| `payments` | Maya | Digital payments and refunds |
-
----
-
-## Getting Started
-
-### Option A - Docker (recommended)
-
-Five commands and you are running:
-
-```bash
-# Clone and build the image
-git clone <repo-url> && cd avrs
-docker compose build
-
-# Set your API key
-cp .env.example .env
-# edit .env - add ANTHROPIC_API_KEY at minimum
-
-# Download Kokoro model files (~337MB, one time only)
-docker compose run --rm avrs download-models
-
-# Build the prerecorded phrase corpus (one time only)
-docker compose run --rm avrs build-corpus
-
-# Start the server
-docker compose up
-```
-
-Open `http://localhost:8001` - the browser demo is ready.
-
-### Option B - Local Python
+### 1. Backend
 
 ```bash
 git clone <repo-url> && cd avrs
@@ -208,120 +135,179 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[kokoro]"
 python -m spacy download en_core_web_sm
 
-# Download Kokoro model files from:
-# https://github.com/thewh1teagle/kokoro-onnx/releases
-# Place kokoro-v1.0.onnx and voices-v1.0.bin in models/kokoro/
+# Models (~337MB, one-time)
+bash scripts/download_models.sh
 
-cp .env.example .env   # add ANTHROPIC_API_KEY
+# Build the screener corpus
+python scripts/build_insurance_corpus.py   # also picks up corpus_data/screener/
 
-python scripts/build_insurance_corpus.py
-uvicorn avrs.voice_api:app --host 0.0.0.0 --port 8001 --reload
+cp .env.example .env
+# Required: ANTHROPIC_API_KEY
+# Recommended: DEEPGRAM_API_KEY (fast cloud STT, ~200ms)
+# Production: AVRS_API_KEY (gates admin endpoints - leave empty only for local dev)
+# Telephony: PLIVO_AUTH_ID + PLIVO_AUTH_TOKEN  (or Exotel credentials)
+
+uvicorn avrs.voice_api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### No models? Use mock mode
+Or use Docker (`docker compose up` after setting `.env` and running the `download-models` / `build-corpus` entrypoints).
 
-Want to explore the API and agent logic without downloading anything:
+### 2. Telephony provider
+
+Pickr supports **Exotel** (Voicebot WebSocket) and **Plivo** (AudioStream). Plivo is the recommended path for Indian numbers.
+
+- Provider account with at least one virtual number (Exophone or Plivo number).
+- WebSocket URL pointed at your public backend:
+  - Exotel: `wss://your-domain.com/ws/exotel`
+  - Plivo: configured in the Plivo answer XML returned by `/v1/plivo/answer`
+- Seed the number pool so onboarding can assign one to each user:
 
 ```bash
-AVRS_TTS_MODEL=mock   # in .env
+curl -X POST https://your-domain.com/v1/admin/numbers \
+  -H "X-API-Key: $AVRS_API_KEY" -H "Content-Type: application/json" \
+  -d '{"numbers":["+912261234567","+912261234568"], "region":"IN"}'
 ```
 
-Full routing, parsing, and LLM agent runs normally. TTS output is silent placeholders.
+Full provider walkthroughs:
+
+- [`docs/END_TO_END_SETUP.md`](docs/END_TO_END_SETUP.md) - Exotel
+- [`docs/PLIVO_SETUP.md`](docs/PLIVO_SETUP.md) - Plivo
+
+### 3. Android app
+
+```bash
+cd android
+# Edit app/src/main/java/ai/phronetic/screener/Config.kt
+#   const val SERVER_URL = "https://your-domain.com"
+
+./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+The first run guides you through permissions, OTP verification, number assignment, and call-forwarding activation.
 
 ---
 
-## Quick API Test
-
-```bash
-# Start a session
-curl -X POST http://localhost:8001/v1/agent/sessions \
-  -H "Content-Type: application/json" \
-  -d '{"agent": "insurance", "model": "kokoro"}'
-# Returns: {"session_id": "sess_abc123"}
-
-# Ask a question - get back a WAV file
-curl -X POST "http://localhost:8001/v1/agent/sessions/sess_abc123/turn?text=What+is+my+claim+status" \
-  --output response.wav
-
-# Routing breakdown is in the response headers:
-# X-AVRS-Metrics: {"prerecorded_pct": 50, "cached_pct": 25, "tts_chars_pct": 25, "latency_total_ms": 480}
-```
-
-The browser frontend at `http://localhost:8001` gives you a full voice UI with real-time routing breakdown per turn.
-
----
-
-## Benchmarking
-
-```bash
-# Server must be running
-python scripts/find_best_questions.py
-```
-
-Sweeps 22 candidate questions independently, ranks by corpus score (`prerecorded% + cached% x 0.5`), then runs a real 7-turn conversation with the top 7. Shows routing percentages and latencies per turn so you can see exactly which questions benefit most from the corpus.
-
----
-
-## Project Structure
+## Project structure
 
 ```
 avrs/
-├── agents.yaml                      # Persona config - edit this, not code
-├── .env.example                     # Copy to .env and fill in keys
-├── Dockerfile
-├── docker-compose.yml
-├── docker-entrypoint.sh             # download-models / build-corpus / serve
+├── README.md                  # this file (Pickr)
+├── STATUS.md                  # current snapshot of committed vs in-flight work
+├── agents.yaml                # personas (insurance, banking, payments, screener)
+├── .env.example
+├── Dockerfile / docker-compose.yml / docker-entrypoint.sh
 │
-├── avrs/
-│   ├── agent.py                     # LLM agent - Claude + agentic tool loop
-│   ├── parser.py                    # Split response into static/slot segments
-│   ├── corpus.py                    # Fuzzy phrase lookup
-│   ├── router.py                    # Three-tier routing
-│   ├── tts.py                       # Kokoro ONNX / mock TTS engines
-│   ├── stt.py                       # Deepgram / Whisper STT
-│   ├── merger.py                    # Crossfade + pitch align + normalise
-│   ├── metrics.py                   # Per-turn cost / latency breakdown
-│   ├── server.py                    # FastAPI app
-│   └── voice_api.py                 # REST + WebSocket handlers
+├── avrs/                      # backend (Pickr layer + AVRS engine)
+│   ├── voice_api.py           # all HTTP + WebSocket routes
+│   ├── users.py               # OTP, tiers, number pool
+│   ├── exotel.py / plivo.py   # telephony bridges
+│   ├── audio_utils.py         # PCM/μ-law/VAD helpers
+│   ├── agent.py               # Claude tool-use loop
+│   ├── parser.py corpus.py router.py tts.py stt.py merger.py metrics.py
+│   └── server.py
 │
-├── scripts/
-│   ├── download_models.sh           # Fetch Kokoro ONNX files
-│   ├── build_insurance_corpus.py    # Build prerecorded phrase library
-│   └── find_best_questions.py       # Corpus hit rate benchmark
+├── android/                   # Pickr Android app (ai.phronetic.screener)
+│   ├── app/src/main/java/ai/phronetic/screener/
+│   │   ├── Config.kt
+│   │   ├── ScreenerService.kt
+│   │   ├── ScreeningWebSocketService.kt
+│   │   ├── engine/  ui/  viewmodel/  data/
+│   └── build.gradle.kts settings.gradle.kts gradlew
 │
-├── docs/images/                     # Architecture and example diagrams
-├── corpus_data/                     # Source phrase text files
-├── corpus/                          # Generated audio corpus (git-ignored)
-├── cache/                           # Runtime synthesis cache (git-ignored)
-├── models/kokoro/                   # Kokoro model files (git-ignored, ~337MB)
-├── static/index.html                # Browser frontend
-└── tests/
+├── corpus_data/               # source phrase text files (per persona)
+├── corpus/screener/           # generated screener WAVs + index.json
+├── cache/                     # runtime synthesis cache (git-ignored)
+├── models/kokoro/             # Kokoro ONNX (~337MB, git-ignored)
+├── brand/                     # icon.svg, logo.svg
+├── static/index.html          # AVRS browser demo (independent of Pickr)
+│
+├── scripts/                   # download_models.sh, build_*_corpus.py, find_best_questions.py
+├── docs/
+│   ├── END_TO_END_SETUP.md    # Pickr + Exotel + Android wiring
+│   ├── PLIVO_SETUP.md         # Pickr + Plivo wiring
+│   ├── AVRS_Pipeline_Technical.md / .pdf
+│   └── AVRS_Research_Update.md / .pdf
+└── tests/                     # pytest - covers AVRS core today
 ```
 
 ---
 
-## Design Notes
+## Engine: AVRS
 
-**Segment-level routing, not sentence-level.** A sentence like "Your claim CN-20241130-442 is under review" contains both a static frame and a dynamic value. Routing at sentence level means the whole thing goes to TTS. Segment-level routing lets the static parts hit the corpus while only the claim number gets synthesised.
+Pickr is built on **AVRS (Adaptive Voice Rendering System)** - a hybrid audio renderer that makes AI voice fast and cheap enough to put in front of every incoming call.
 
-**Fuzzy matching for corpus lookup.** The LLM phrases things slightly differently each turn. Exact-match lookup would almost never hit. `difflib.SequenceMatcher` at threshold 0.68 handles natural variation without needing a vector database. At 10,000+ corpus phrases, swap to TF-IDF or FAISS.
+The trick: most of what an AI receptionist says is the same on every call. *"Hi, this is Maya. Who's calling?"* / *"One moment, let me check"* / *"Thanks, I'll let them know"*. AVRS prerecords those once, caches per-session synthesis on disk, and only sends genuinely novel text to live TTS.
 
-**Kokoro over cloud TTS.** Fully offline, no per-character cost, no data leaves your server. 82M parameters, runs comfortably in CPU RAM. Good enough for Tier 3 since the corpus and cache absorb the majority of traffic anyway.
+```
+LLM output:
+  "Got it, {caller_name}. I'll let Supreeth know."
+  SLOTS: {"caller_name": "Rahul"}
 
-**The slot format contract.** The LLM uses `snake_case` keys inside `{curly_braces}` and emits a `SLOTS: {...}` line. The extractor regex is `\{(\w+)\}` - hyphens or spaces in keys silently break it and cause audio gaps. Every agent system prompt has explicit CORRECT/WRONG examples to enforce this.
+Renderer:
+  "Got it, "                    → corpus  (~2ms)
+  "Rahul"                       → live TTS (~840ms cold) / cache (~3ms warm)
+  ". I'll let Supreeth know."   → corpus  (~2ms)
+```
+
+Three-tier routing per segment:
+
+| Tier | Latency | Cost |
+|---|---|---|
+| 1. Corpus (prerecorded) | ~2 ms | $0 per call |
+| 2. Session cache (disk) | ~3 ms | $0 per call |
+| 3. Live TTS (Kokoro ONNX, CPU) | 200-840 ms | $0 per character (local) |
+
+Measured on a 7-turn benchmark:
+
+| Turn | Prerecorded | Cached | Live TTS | Total |
+|---|---|---|---|---|
+| Turn 1 (cold) | 33% | 16% | 51% | 1,470 ms |
+| Turn 2 (warm) | 70% | 30% | 0% | **8 ms** |
+
+For Pickr, this means the AI never sounds laggy on follow-up turns and the per-call cost is dominated by the LLM, not TTS.
+
+Deeper reading:
+
+- [`docs/AVRS_Pipeline_Technical.md`](docs/AVRS_Pipeline_Technical.md) - architecture and segment routing
+- [`docs/AVRS_Research_Update.md`](docs/AVRS_Research_Update.md) - paper-style write-up
 
 ---
 
-## Troubleshooting
+## Tech stack
 
-| Symptom | Fix |
+| Layer | Technology |
 |---|---|
-| `ANTHROPIC_API_KEY not set` | Add to `.env` or export in shell |
-| `Kokoro model files not found` | Run `docker compose run --rm avrs download-models` |
-| `Can't find model 'en_core_web_sm'` | `python -m spacy download en_core_web_sm` |
-| Silent gaps in audio output | Slot key has hyphens or spaces - use `snake_case` only |
-| `422 Unprocessable Entity` on session create | Send `{"agent": "..."}` as a JSON body, not query params |
-| STT is slow (using Whisper) | Set `DEEPGRAM_API_KEY` in `.env` for the fast cloud path |
+| Backend | FastAPI + uvicorn |
+| LLM | Claude (Anthropic) with tool use |
+| STT | Deepgram nova-2 (cloud) / faster-whisper (offline) |
+| TTS | Kokoro ONNX - 82M params, CPU only |
+| Telephony | Exotel Voicebot, Plivo AudioStream |
+| Persistence | JSON files today (Postgres + Redis is the planned next step) |
+| Android | Kotlin, Jetpack Compose, Room, OkHttp WebSockets |
+
+---
+
+## Status
+
+See [`STATUS.md`](STATUS.md) for an up-to-date snapshot of what's committed on this branch vs in-flight, known gaps (no tests yet for the Pickr backend layer, JSON persistence is MVP-grade), and suggested next moves.
+
+---
+
+## Quick reference
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Liveness + agent/user/pool counts |
+| `POST /v1/auth/otp/request` | Send OTP to a phone number |
+| `POST /v1/auth/otp/verify` | Verify OTP, get token + assigned virtual number |
+| `GET/PATCH /v1/auth/me` | User profile (greeting, name) |
+| `WS /ws/exotel` | Exotel Voicebot bridge |
+| `WS /ws/plivo` | Plivo AudioStream bridge |
+| `WS /ws/screen?token=...` | Live transcript + intent stream for the Android app |
+| `POST /v1/admin/numbers` | Seed the virtual number pool (X-API-Key) |
+| `GET /v1/admin/users` | List users (X-API-Key) |
+| `GET /v1/admin/analytics` | Usage analytics (X-API-Key) |
 
 ---
 
@@ -330,3 +316,5 @@ avrs/
 ```bash
 pytest tests/
 ```
+
+Covers the AVRS core (`parser`, `merger`, `router`, `metrics`). The Pickr layer (`users.py`, `exotel.py`, `plivo.py`, `audio_utils.py`, voice_api auth/admin) does not yet have tests - tracked in `STATUS.md`.

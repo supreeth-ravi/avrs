@@ -75,13 +75,13 @@
   <rect x="134.5" y="73" width="5.5" height="14" rx="2.75" fill="url(#wg)" filter="url(#bg)"/>
 
   <!-- ── Wordmark ── -->
-  <!-- "callm" — large, tight-tracked, modern sans -->
+  <!-- "Pickr" — large, tight-tracked, modern sans -->
   <text x="192" y="108"
         font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
         font-size="88"
         font-weight="700"
         letter-spacing="-3"
-        fill="url(#textGrad)">callm</text>
+        fill="url(#textGrad)">Pickr</text>
 
   <!-- Tagline -->
   <text x="194" y="136"
