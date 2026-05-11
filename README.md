@@ -10,8 +10,6 @@
 
 **Author:** Supreeth Ravi &nbsp;|&nbsp; **Version:** 0.1.0
 
-<img src="brand/avrs_logo.svg" alt="AVRS wordmark" width="520" />
-
 </div>
 
 ---
