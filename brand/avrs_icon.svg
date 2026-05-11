@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    AVRS Icon — Adaptive Voice Rendering System
+
+    Design narrative: a single waveform stitched together from three
+    colour-coded sources. Left zone = prerecorded corpus (violet),
+    middle zone = session cache (cyan), right zone = live TTS (amber).
+    The vertical seams between zones are the merger's crossfade.
+    Subtle "stitch" notches at each seam tell the story without text.
+  -->
+  <defs>
+    <!-- Background: deep navy → near-black -->
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F0820"/>
+      <stop offset="100%" stop-color="#04040A"/>
+    </linearGradient>
+
+    <!-- Tier 1 — Corpus (violet) -->
+    <linearGradient id="t1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#A78BFA"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+
+    <!-- Tier 2 — Cache (cyan) -->
+    <linearGradient id="t2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#67E8F9"/>
+      <stop offset="100%" stop-color="#06B6D4"/>
+    </linearGradient>
+
+    <!-- Tier 3 — Live TTS (amber) -->
+    <linearGradient id="t3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FCD34D"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+
+    <!-- Ambient blob blur -->
+    <filter id="blob" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="60"/>
+    </filter>
+
+    <!-- Crisp glow on bars -->
+    <filter id="glow" x="-50%" y="-30%" width="200%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Seam line gradient (faint vertical accent at zone boundaries) -->
+    <linearGradient id="seam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="110" fill="url(#bg)"/>
+
+  <!-- Ambient colour blobs hint at the three tiers -->
+  <circle cx="155" cy="180" r="115" fill="#7C3AED" opacity="0.20" filter="url(#blob)"/>
+  <circle cx="256" cy="340" r="110" fill="#06B6D4" opacity="0.16" filter="url(#blob)"/>
+  <circle cx="365" cy="200" r="100" fill="#F59E0B" opacity="0.14" filter="url(#blob)"/>
+
+  <!--
+    Waveform: 15 bars, bell profile, centred at y=256.
+    Layout: bar width 18, gap 8, total span = 15*18 + 14*8 = 382, start x = 65.
+    Heights (bell): 36 60 84 104 122 134 142 144 142 134 122 104 84 60 36
+    Top edge y = 256 - h/2
+
+    Zones (5 bars each):
+      Bars 1-5  → violet (corpus)
+      Bars 6-10 → cyan   (cache)
+      Bars 11-15→ amber  (live TTS)
+
+    Seams between zones at x = 65 + 5*(18+8) - 4 = 191 and x = 65 + 10*(18+8) - 4 = 321
+  -->
+
+  <!-- Faint horizontal "audio rail" baseline -->
+  <line x1="80" y1="256" x2="432" y2="256"
+        stroke="#FFFFFF" stroke-opacity="0.06" stroke-width="1"/>
+
+  <!-- Zone seam markers (the crossfade lines) -->
+  <line x1="191" y1="120" x2="191" y2="392" stroke="url(#seam)" stroke-width="1"/>
+  <line x1="321" y1="120" x2="321" y2="392" stroke="url(#seam)" stroke-width="1"/>
+
+  <!-- ── Zone 1: Corpus (violet) ── bars 1-5 -->
+  <rect x="65"  y="238" width="18" height="36"  rx="9" fill="url(#t1)" filter="url(#glow)"/>
+  <rect x="91"  y="226" width="18" height="60"  rx="9" fill="url(#t1)" filter="url(#glow)"/>
+  <rect x="117" y="214" width="18" height="84"  rx="9" fill="url(#t1)" filter="url(#glow)"/>
+  <rect x="143" y="204" width="18" height="104" rx="9" fill="url(#t1)" filter="url(#glow)"/>
+  <rect x="169" y="195" width="18" height="122" rx="9" fill="url(#t1)" filter="url(#glow)"/>
+
+  <!-- ── Zone 2: Cache (cyan) ── bars 6-10 -->
+  <rect x="195" y="189" width="18" height="134" rx="9" fill="url(#t2)" filter="url(#glow)"/>
+  <rect x="221" y="185" width="18" height="142" rx="9" fill="url(#t2)" filter="url(#glow)"/>
+  <rect x="247" y="184" width="18" height="144" rx="9" fill="url(#t2)" filter="url(#glow)"/>
+  <rect x="273" y="185" width="18" height="142" rx="9" fill="url(#t2)" filter="url(#glow)"/>
+  <rect x="299" y="189" width="18" height="134" rx="9" fill="url(#t2)" filter="url(#glow)"/>
+
+  <!-- ── Zone 3: Live TTS (amber) ── bars 11-15 -->
+  <rect x="325" y="195" width="18" height="122" rx="9" fill="url(#t3)" filter="url(#glow)"/>
+  <rect x="351" y="204" width="18" height="104" rx="9" fill="url(#t3)" filter="url(#glow)"/>
+  <rect x="377" y="214" width="18" height="84"  rx="9" fill="url(#t3)" filter="url(#glow)"/>
+  <rect x="403" y="226" width="18" height="60"  rx="9" fill="url(#t3)" filter="url(#glow)"/>
+  <rect x="429" y="238" width="18" height="36"  rx="9" fill="url(#t3)" filter="url(#glow)"/>
+
+  <!-- Tiny tier-indicator dots under each zone (whisper-quiet visual key) -->
+  <circle cx="125" cy="368" r="3.5" fill="#7C3AED" opacity="0.8"/>
+  <circle cx="256" cy="368" r="3.5" fill="#06B6D4" opacity="0.8"/>
+  <circle cx="387" cy="368" r="3.5" fill="#F59E0B" opacity="0.8"/>
+</svg>

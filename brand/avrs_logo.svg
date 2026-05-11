@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 180" width="760" height="180">
+  <!--
+    AVRS Logo — icon mark + wordmark + tagline.
+    Icon condensed to a 160×160 mark on the left; wordmark right-aligned.
+  -->
+  <defs>
+    <linearGradient id="bgL" x1="0" y1="0" x2="160" y2="160" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0F0820"/>
+      <stop offset="100%" stop-color="#04040A"/>
+    </linearGradient>
+
+    <linearGradient id="t1L" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#A78BFA"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+    <linearGradient id="t2L" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#67E8F9"/>
+      <stop offset="100%" stop-color="#06B6D4"/>
+    </linearGradient>
+    <linearGradient id="t3L" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FCD34D"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+
+    <!-- Wordmark gradient: violet → cyan → amber, mirrors the icon's three tiers -->
+    <linearGradient id="wordGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#A78BFA"/>
+      <stop offset="50%"  stop-color="#67E8F9"/>
+      <stop offset="100%" stop-color="#FCD34D"/>
+    </linearGradient>
+
+    <linearGradient id="tagGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#7C3AED" stop-opacity="0.85"/>
+      <stop offset="50%"  stop-color="#06B6D4" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#F59E0B" stop-opacity="0.85"/>
+    </linearGradient>
+
+    <filter id="blobL" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="20"/>
+    </filter>
+    <filter id="glowL" x="-50%" y="-30%" width="200%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <linearGradient id="seamL" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ─── Icon mark (160×160, vertically centred) ─── -->
+  <g transform="translate(10, 10)">
+    <rect x="0" y="0" width="160" height="160" rx="34" fill="url(#bgL)"/>
+
+    <!-- Ambient blobs -->
+    <circle cx="48"  cy="55"  r="36" fill="#7C3AED" opacity="0.22" filter="url(#blobL)"/>
+    <circle cx="80"  cy="105" r="35" fill="#06B6D4" opacity="0.18" filter="url(#blobL)"/>
+    <circle cx="115" cy="62"  r="32" fill="#F59E0B" opacity="0.16" filter="url(#blobL)"/>
+
+    <!-- Baseline -->
+    <line x1="20" y1="80" x2="140" y2="80" stroke="#FFFFFF" stroke-opacity="0.06" stroke-width="0.6"/>
+
+    <!-- Seam markers between zones -->
+    <line x1="60" y1="32" x2="60" y2="128" stroke="url(#seamL)" stroke-width="0.6"/>
+    <line x1="100" y1="32" x2="100" y2="128" stroke="url(#seamL)" stroke-width="0.6"/>
+
+    <!--
+      15 bars, bell profile, centred at y=80.
+      Bar width 5.5, gap 2.5. Total span 5.5*15 + 2.5*14 = 117.5. Start x = 21.25.
+      Heights (bell profile, scaled): 11 19 27 33 39 43 45 46 45 43 39 33 27 19 11
+      Top y = 80 - h/2
+
+      Zones: bars 1-5 violet; 6-10 cyan; 11-15 amber.
+    -->
+
+    <!-- Zone 1 — corpus (violet) -->
+    <rect x="21.25" y="74.5" width="5.5" height="11" rx="2.75" fill="url(#t1L)" filter="url(#glowL)"/>
+    <rect x="29.25" y="70.5" width="5.5" height="19" rx="2.75" fill="url(#t1L)" filter="url(#glowL)"/>
+    <rect x="37.25" y="66.5" width="5.5" height="27" rx="2.75" fill="url(#t1L)" filter="url(#glowL)"/>
+    <rect x="45.25" y="63.5" width="5.5" height="33" rx="2.75" fill="url(#t1L)" filter="url(#glowL)"/>
+    <rect x="53.25" y="60.5" width="5.5" height="39" rx="2.75" fill="url(#t1L)" filter="url(#glowL)"/>
+
+    <!-- Zone 2 — cache (cyan) -->
+    <rect x="61.25" y="58.5" width="5.5" height="43" rx="2.75" fill="url(#t2L)" filter="url(#glowL)"/>
+    <rect x="69.25" y="57.5" width="5.5" height="45" rx="2.75" fill="url(#t2L)" filter="url(#glowL)"/>
+    <rect x="77.25" y="57"   width="5.5" height="46" rx="2.75" fill="url(#t2L)" filter="url(#glowL)"/>
+    <rect x="85.25" y="57.5" width="5.5" height="45" rx="2.75" fill="url(#t2L)" filter="url(#glowL)"/>
+    <rect x="93.25" y="58.5" width="5.5" height="43" rx="2.75" fill="url(#t2L)" filter="url(#glowL)"/>
+
+    <!-- Zone 3 — live TTS (amber) -->
+    <rect x="101.25" y="60.5" width="5.5" height="39" rx="2.75" fill="url(#t3L)" filter="url(#glowL)"/>
+    <rect x="109.25" y="63.5" width="5.5" height="33" rx="2.75" fill="url(#t3L)" filter="url(#glowL)"/>
+    <rect x="117.25" y="66.5" width="5.5" height="27" rx="2.75" fill="url(#t3L)" filter="url(#glowL)"/>
+    <rect x="125.25" y="70.5" width="5.5" height="19" rx="2.75" fill="url(#t3L)" filter="url(#glowL)"/>
+    <rect x="133.25" y="74.5" width="5.5" height="11" rx="2.75" fill="url(#t3L)" filter="url(#glowL)"/>
+
+    <!-- Tier-indicator dots -->
+    <circle cx="40"  cy="118" r="1.6" fill="#7C3AED"/>
+    <circle cx="80"  cy="118" r="1.6" fill="#06B6D4"/>
+    <circle cx="120" cy="118" r="1.6" fill="#F59E0B"/>
+  </g>
+
+  <!-- ─── Wordmark ─── -->
+  <text x="200" y="105"
+        font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
+        font-size="78"
+        font-weight="800"
+        letter-spacing="-2"
+        fill="url(#wordGrad)">AVRS</text>
+
+  <!-- ─── Tagline ─── -->
+  <text x="202" y="135"
+        font-family="'SF Pro Text', 'Helvetica Neue', Arial, sans-serif"
+        font-size="14"
+        font-weight="500"
+        letter-spacing="3"
+        fill="url(#tagGrad)">ADAPTIVE  VOICE  RENDERING</text>
+
+  <!-- ─── Sub-line: tier legend (subtle) ─── -->
+  <g transform="translate(202, 152)" font-family="'SF Mono', Menlo, monospace" font-size="9.5" font-weight="500" letter-spacing="0.5">
+    <circle cx="4" cy="-3" r="3" fill="#7C3AED"/>
+    <text x="12" y="0" fill="#A78BFA" opacity="0.85">corpus</text>
+
+    <circle cx="78" cy="-3" r="3" fill="#06B6D4"/>
+    <text x="86" y="0" fill="#67E8F9" opacity="0.85">cache</text>
+
+    <circle cx="142" cy="-3" r="3" fill="#F59E0B"/>
+    <text x="150" y="0" fill="#FCD34D" opacity="0.85">live tts</text>
+  </g>
+</svg>

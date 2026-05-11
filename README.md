@@ -1,8 +1,18 @@
-# AVRS - Adaptive Voice Rendering System
+<div align="center">
+
+<img src="brand/avrs_icon.svg" alt="AVRS logo" width="160" />
+
+# AVRS
+
+### Adaptive Voice Rendering System
 
 > Real-time hybrid audio rendering that makes voice AI agents fast, cheap, and seamless.
 
 **Author:** Supreeth Ravi &nbsp;|&nbsp; **Version:** 0.1.0
+
+<img src="brand/avrs_logo.svg" alt="AVRS wordmark" width="520" />
+
+</div>
 
 ---
 
