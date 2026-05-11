@@ -10,8 +10,6 @@
 
 **Author:** Supreeth Ravi &nbsp;|&nbsp; **Branch:** `feat/pickr` &nbsp;|&nbsp; **Engine:** AVRS
 
-<img src="brand/logo.svg" alt="Pickr wordmark" width="420" />
-
 </div>
 
 ---
